@@ -92,6 +92,11 @@ nix build --no-link
 Release metadata is injected with Go linker flags; snapshots can be built with
 GoReleaser.
 
+Repository conventions live in [AGENTS.md](AGENTS.md). Architecture and release
+details are documented in [docs/architecture.md](docs/architecture.md) and
+[docs/releasing.md](docs/releasing.md). Codex also discovers the checked-in
+`maintain-codex-history` workflow from `.agents/skills`.
+
 ## Privacy and compatibility
 
 `codex-history` launches `codex app-server --listen stdio://` and uses the

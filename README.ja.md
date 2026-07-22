@@ -85,6 +85,11 @@ staticcheck ./...
 nix build --no-link
 ```
 
+リポジトリの作業規約は [AGENTS.md](AGENTS.md)、設計とリリース手順は
+[docs/architecture.md](docs/architecture.md) と
+[docs/releasing.md](docs/releasing.md) にまとめています。Codexは
+`.agents/skills` にある `maintain-codex-history` Skillも自動検出します。
+
 本プロジェクトはコミュニティ製であり、OpenAIの公式製品ではありません。
 
 ## ライセンス
