@@ -1,0 +1,57 @@
+version: 2
+
+project_name: codex-history
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: codex-history
+    main: ./cmd/codex-history
+    binary: codex-history
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/HizKz/codex-history/internal/buildinfo.Version={{.Version}}
+      - -X github.com/HizKz/codex-history/internal/buildinfo.Commit={{.Commit}}
+      - -X github.com/HizKz/codex-history/internal/buildinfo.Date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+homebrew_casks:
+  - name: codex-history
+    binaries: [codex-history]
+    repository:
+      owner: Hizkz
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    url:
+      verified: github.com/HizKz/codex-history/
+    homepage: https://github.com/HizKz/codex-history
+    description: Browse, search, and resume local Codex conversations
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/codex-history"]
+          end
+
+release:
+  draft: true

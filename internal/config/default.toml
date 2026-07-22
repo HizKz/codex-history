@@ -1,0 +1,80 @@
+# codex-history configuration. Unknown fields are rejected.
+# Run `codex-history config check` after editing this file.
+config_version = 1
+
+[codex]
+# Executable name or an absolute path.
+binary = "codex"
+
+[ui]
+# terminal, dark, or light
+theme = "terminal"
+show_help = true
+show_timestamps = true
+date_format = "2006-01-02 15:04"
+tool_details = "collapsed"
+compact_breakpoint = 100
+
+[ui.colors]
+accent = "default"
+selected = "default"
+muted = "default"
+border = "default"
+user = "default"
+assistant = "default"
+warning = "yellow"
+error = "red"
+
+[history]
+# cli, vscode, app_server, exec, sub_agent, unknown
+sources = ["cli", "vscode", "app_server"]
+include_archived = false
+sort_key = "recency"
+sort_direction = "desc"
+page_size = 100
+
+[search]
+# This is a local SQLite cache; --no-cache overrides it.
+cache = true
+index_on_startup = true
+max_parallel_reads = 4
+
+[resume]
+# return, replace, or print_command
+mode = "return"
+
+[keys]
+# Set false to build a keymap from scratch. ctrl+c is always reserved.
+use_defaults = true
+
+[keys.global]
+quit = ["q"]
+help = ["?"]
+focus_next = ["tab"]
+search = ["/"]
+refresh = ["r"]
+rebuild_index = ["shift+r"]
+reload_config = ["ctrl+r"]
+toggle_sources = ["s"]
+toggle_archived = ["a"]
+
+[keys.list]
+up = ["k", "up"]
+down = ["j", "down"]
+page_up = ["pgup"]
+page_down = ["pgdown"]
+first = ["home"]
+last = ["end"]
+resume = ["enter"]
+
+[keys.transcript]
+up = ["k", "up"]
+down = ["j", "down"]
+page_up = ["pgup"]
+page_down = ["pgdown"]
+toggle_item = ["space"]
+
+[keys.search]
+accept = ["enter"]
+cancel = ["esc"]
+clear = ["ctrl+u"]

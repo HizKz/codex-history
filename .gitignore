@@ -1,0 +1,7 @@
+/codex-history
+/dist/
+/.direnv/
+/.envrc.local
+*.test
+*.out
+.DS_Store

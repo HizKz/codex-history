@@ -1,0 +1,56 @@
+package config
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestDecodeMergesDefaults(t *testing.T) {
+	cfg, err := Decode(strings.NewReader("config_version = 1\n[ui]\nshow_help = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.ShowHelp {
+		t.Fatal("expected explicit show_help=false")
+	}
+	if cfg.Codex.Binary != "codex" || len(cfg.Keys.List.Down) == 0 {
+		t.Fatal("expected unspecified values to retain defaults")
+	}
+}
+
+func TestDecodeRejectsUnknownField(t *testing.T) {
+	_, err := Decode(strings.NewReader("config_version = 1\nunknown = true\n"))
+	if err == nil {
+		t.Fatalf("expected an unknown-field error, got %v", err)
+	}
+}
+
+func TestCanonicalKeyPreservesUppercase(t *testing.T) {
+	for _, input := range []string{"R", "shift+r"} {
+		got, err := CanonicalKey(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "R" {
+			t.Fatalf("CanonicalKey(%q) = %q, want R", input, got)
+		}
+	}
+}
+
+func TestUseDefaultsFalseAllowsAnEmptyKeymap(t *testing.T) {
+	cfg, err := Decode(strings.NewReader("config_version = 1\n[keys]\nuse_defaults = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Keys.Global.Quit) != 0 {
+		t.Fatalf("expected an empty custom keymap, got %v", cfg.Keys.Global.Quit)
+	}
+}
+
+func TestReservedEmergencyKey(t *testing.T) {
+	cfg := Defaults()
+	cfg.Keys.Global.Quit = []string{"ctrl+c"}
+	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("expected reserved-key error, got %v", err)
+	}
+}
