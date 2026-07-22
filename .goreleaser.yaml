@@ -39,7 +39,7 @@ homebrew_casks:
   - name: codex-history
     binaries: [codex-history]
     repository:
-      owner: Hizkz
+      owner: HizKz
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     url:

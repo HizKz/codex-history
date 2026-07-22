@@ -9,7 +9,7 @@ starts GoReleaser, but the GitHub release remains a draft for review.
 - Go, Nix, and GoReleaser available.
 - The `HizKz/homebrew-tap` repository exists.
 - `HOMEBREW_TAP_GITHUB_TOKEN` is configured as a repository Actions secret with
-  permission to write to the tap.
+  Contents read/write permission scoped to the tap repository.
 
 ## Prepare
 
@@ -45,8 +45,22 @@ installation on at least one supported platform before publishing the draft.
 
 The checked-in `package.nix` supports the local flake. A nixpkgs submission must
 fetch the tagged GitHub source and use fixed source and vendor hashes for that
-release. Test the proposed nixpkgs expression on an available Darwin or Linux
-platform before opening the upstream pull request.
+release. Add new packages below
+`pkgs/by-name/co/codex-history/package.nix`, and add a maintainer entry in a
+separate commit when the maintainer is not already registered.
+
+The upstream package should wrap `codex-history` with the nixpkgs `codex`
+package on `PATH`, while preserving `--codex-bin` and `codex.binary` overrides.
+Before opening the upstream pull request, run the maintainer test, build the
+package, check `codex-history --version` and `--help`, and run
+`nixpkgs-review wip` on an available Darwin or Linux platform.
+
+Use these upstream commit subjects:
+
+```text
+maintainers: add HizKz
+codex-history: init at X.Y.Z
+```
 
 Never reuse `lib.fakeHash` in a submitted package and never publish a tag merely
 to discover release hashes without the user's approval.

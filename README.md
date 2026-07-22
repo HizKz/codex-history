@@ -17,7 +17,24 @@ optional full-text index is a local SQLite database.
 - Source and archived-conversation filters
 - macOS and Linux support, designed for Homebrew and Nix distribution
 
-## Install from source
+## Installation
+
+Codex CLI must be installed and available as `codex` unless another executable
+is selected with `--codex-bin` or `codex.binary` in the configuration file.
+
+### Homebrew
+
+```sh
+brew install --cask HizKz/tap/codex-history
+```
+
+### Release archive
+
+Download the archive for your platform from the
+[GitHub releases](https://github.com/HizKz/codex-history/releases), verify it
+against `checksums.txt`, and place `codex-history` on your `PATH`.
+
+### From source
 
 Requirements: Go 1.25 or newer and a working `codex` executable.
 
@@ -25,8 +42,7 @@ Requirements: Go 1.25 or newer and a working `codex` executable.
 go install github.com/HizKz/codex-history/cmd/codex-history@latest
 ```
 
-The Homebrew tap, nixpkgs package, and prebuilt release archives will be added
-after the first tagged release.
+An upstream nixpkgs package is planned after the first tagged release.
 
 ## Usage
 
