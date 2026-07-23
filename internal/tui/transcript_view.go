@@ -40,6 +40,11 @@ func buildTranscriptLines(transcript history.Transcript, width int, showActivity
 	appendLine := func(line transcriptLine) {
 		lines = append(lines, line)
 	}
+	appendSpacing := func(turn int) {
+		if len(lines) > 0 && lines[len(lines)-1].Text != "" {
+			appendLine(transcriptLine{Text: "", Role: lineMuted, Turn: turn})
+		}
+	}
 	appendText := func(text string, role transcriptLineRole, turn int) {
 		wrapped := wrapLines(text, width)
 		if len(wrapped) == 0 {
@@ -56,14 +61,13 @@ func buildTranscriptLines(transcript history.Transcript, width int, showActivity
 		} else if item.Role == "assistant" {
 			role = lineAssistant
 		}
+		appendSpacing(turn)
 		appendLine(transcriptLine{Text: strings.ToUpper(item.Title), Role: role, Turn: turn})
 		appendText(item.Text, lineBody, turn)
 	}
 
 	for turnIndex, turn := range transcript.Turns {
-		if len(lines) > 0 {
-			appendLine(transcriptLine{Text: "", Role: lineMuted, Turn: turnIndex})
-		}
+		appendSpacing(turnIndex)
 		heading := fmt.Sprintf("TURN %d", turnIndex+1)
 		if turn.Status != "" {
 			heading += " · " + turn.Status
@@ -78,6 +82,7 @@ func buildTranscriptLines(transcript history.Transcript, width int, showActivity
 			}
 		}
 		if len(turn.Activity) > 0 {
+			appendSpacing(turnIndex)
 			appendLine(transcriptLine{
 				Text:       activitySummary(turn.Activity),
 				Role:       lineActivity,

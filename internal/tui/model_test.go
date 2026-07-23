@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/HizKz/codex-history/internal/appserver"
 	"github.com/HizKz/codex-history/internal/config"
 	"github.com/HizKz/codex-history/internal/history"
 )
@@ -31,6 +33,58 @@ func TestJapaneseDisplayWidth(t *testing.T) {
 	lines := wrapLines("日本語の会話", 6)
 	if strings.Join(lines, "") != "日本語の会話" || len(lines) != 2 {
 		t.Fatalf("unexpected Japanese wrap: %#v", lines)
+	}
+}
+
+func TestRenderListUsesTwoLineConversationEntries(t *testing.T) {
+	m := transcriptTestModel()
+	m.focus = focusList
+	m.cfg.UI.ShowTimestamps = false
+	m.visible = []appserver.Thread{
+		{ID: "thread-1", Preview: "Parser investigation", CWD: "/work/config-parser", Source: "cli"},
+		{ID: "thread-2", Preview: "日本語の長い会話タイトル", CWD: "/work/日本語プロジェクト", Source: "vscode", Archived: true},
+	}
+	m.selected = 1
+
+	rendered := stripSGR(m.renderList(48, 12))
+	for _, want := range []string{
+		"  Parser investigation",
+		"  config-parser · cli",
+		"› [A] 日本語の長い会話タイトル",
+		"│ 日本語プロジェクト · vscode",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("conversation list missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
+func stripSGR(value string) string {
+	return regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(value, "")
+}
+
+func TestConversationListStylesEmphasizeTitles(t *testing.T) {
+	m := transcriptTestModel()
+	if style := m.conversationListTitleStyle(false); !style.GetBold() || style.GetUnderline() {
+		t.Fatalf("unselected title style = %#v", style)
+	}
+	if style := m.conversationListTitleStyle(true); !style.GetBold() || !style.GetUnderline() {
+		t.Fatalf("selected title style = %#v", style)
+	}
+	if style := m.conversationListMetadataStyle(false); !style.GetFaint() {
+		t.Fatalf("unselected metadata style = %#v", style)
+	}
+	if style := m.conversationListMetadataStyle(true); style.GetFaint() {
+		t.Fatalf("selected metadata should not be faint: %#v", style)
+	}
+}
+
+func TestConversationListPageSizeUsesCompleteEntries(t *testing.T) {
+	if got := conversationListPageSize(9); got != 4 {
+		t.Fatalf("page size = %d, want 4", got)
+	}
+	if got := conversationListPageSize(1); got != 1 {
+		t.Fatalf("single-row page size = %d, want 1", got)
 	}
 }
 
@@ -77,6 +131,37 @@ func TestTranscriptUsesConfiguredScrollKeys(t *testing.T) {
 	got := next.(model)
 	if got.transcriptCursor != 1 {
 		t.Fatalf("custom down key moved to %d", got.transcriptCursor)
+	}
+}
+
+func TestTranscriptSeparatesConversationBlocks(t *testing.T) {
+	lines := transcriptTestModel().currentTranscriptLines()
+	var text []string
+	for _, line := range lines {
+		text = append(text, line.Text)
+	}
+
+	want := []string{
+		"TURN 1",
+		"",
+		"YOU",
+		"Please inspect the parser.",
+		"",
+		"▶ Activity  2 · cmd 1 · plan 1",
+		"",
+		"CODEX",
+		"The parser is in config.go.",
+		"",
+		"TURN 2",
+		"",
+		"YOU",
+		"Thanks.",
+		"",
+		"CODEX",
+		"You're welcome.",
+	}
+	if strings.Join(text, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected transcript spacing:\ngot:  %#v\nwant: %#v", text, want)
 	}
 }
 

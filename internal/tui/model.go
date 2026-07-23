@@ -41,6 +41,8 @@ const (
 	focusTranscript
 )
 
+const conversationListItemRows = 2
+
 type helpSection struct {
 	scope string
 	title string
@@ -473,7 +475,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	old := m.selected
-	page := max(1, m.height-8)
+	page := conversationListPageSize(m.transcriptRows())
 	switch {
 	case m.cfg.Keys.Match("list", "up", key):
 		m.selected--
@@ -839,42 +841,71 @@ func (m model) renderList(width, height int) string {
 	innerWidth := max(10, width-2)
 	innerHeight := max(2, height-2)
 	rows := max(1, innerHeight-1)
+	pageSize := conversationListPageSize(rows)
 	start := 0
-	if m.selected >= rows {
-		start = m.selected - rows + 1
+	if m.selected >= pageSize {
+		start = m.selected - pageSize + 1
 	}
-	end := min(len(m.visible), start+rows)
+	end := min(len(m.visible), start+pageSize)
 	lines := make([]string, 0, rows)
 	for i := start; i < end; i++ {
 		thread := m.visible[i]
 		marker := "  "
+		if i == m.selected {
+			marker = "› "
+		}
+		itemTitle := history.Title(thread)
 		if thread.Archived {
-			marker = "A "
+			itemTitle = "[A] " + itemTitle
 		}
-		when := ""
-		reserved := 0
-		if m.cfg.UI.ShowTimestamps {
-			when = " " + time.Unix(thread.UpdatedAt, 0).Format(m.cfg.UI.DateFormat)
-			reserved = utf8.RuneCountInString(when)
-		}
+		title := marker + truncate(itemTitle, max(1, innerWidth-2))
+		metadataMarker := "  "
+		selected := i == m.selected
+		titleStyle := m.conversationListTitleStyle(selected).Width(innerWidth).MaxWidth(innerWidth)
+		metadataStyle := m.conversationListMetadataStyle(selected).Width(innerWidth).MaxWidth(innerWidth)
 		if i == m.selected {
-			if thread.Archived {
-				marker = "›A"
-			} else {
-				marker = "› "
-			}
+			metadataMarker = "│ "
 		}
-		text := marker + truncate(history.Title(thread), max(8, innerWidth-4-reserved)) + when
-		style := lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth)
-		if i == m.selected {
-			style = applyForeground(style, m.semanticColor("selected", m.cfg.UI.Colors.Selected)).Bold(true)
-		}
-		lines = append(lines, style.Render(text))
+		metadata := metadataMarker + truncate(m.conversationListMetadata(thread), max(1, innerWidth-2))
+		lines = append(lines, titleStyle.Render(title), metadataStyle.Render(metadata))
 	}
 	for len(lines) < rows {
 		lines = append(lines, "")
 	}
 	return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + strings.Join(lines, "\n"))
+}
+
+func conversationListPageSize(rows int) int {
+	return max(1, rows/conversationListItemRows)
+}
+
+func (m model) conversationListTitleStyle(selected bool) lipgloss.Style {
+	style := lipgloss.NewStyle().Bold(true)
+	if selected {
+		style = applyForeground(style, m.semanticColor("selected", m.cfg.UI.Colors.Selected)).Underline(true)
+	}
+	return style
+}
+
+func (m model) conversationListMetadataStyle(selected bool) lipgloss.Style {
+	if selected {
+		return applyForeground(lipgloss.NewStyle(), m.semanticColor("selected", m.cfg.UI.Colors.Selected))
+	}
+	return m.mutedStyle().Faint(true)
+}
+
+func (m model) conversationListMetadata(thread appserver.Thread) string {
+	var parts []string
+	if cwd := strings.TrimSpace(thread.CWD); cwd != "" {
+		parts = append(parts, filepath.Base(cwd))
+	}
+	if source := strings.TrimSpace(thread.Source); source != "" {
+		parts = append(parts, source)
+	}
+	if m.cfg.UI.ShowTimestamps {
+		parts = append(parts, time.Unix(thread.UpdatedAt, 0).Format(m.cfg.UI.DateFormat))
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (m model) renderTranscript(width, height int) string {
