@@ -13,7 +13,7 @@ func TestDecodeMergesDefaults(t *testing.T) {
 	if cfg.UI.ShowHelp {
 		t.Fatal("expected explicit show_help=false")
 	}
-	if cfg.Codex.Binary != "codex" || len(cfg.Keys.List.Down) == 0 {
+	if cfg.Codex.Binary != "codex" || len(cfg.Keys.List.Down) == 0 || len(cfg.Keys.Activity.Open) == 0 || len(cfg.Keys.Detail.Close) == 0 {
 		t.Fatal("expected unspecified values to retain defaults")
 	}
 }
@@ -52,5 +52,13 @@ func TestReservedEmergencyKey(t *testing.T) {
 	cfg.Keys.Global.Quit = []string{"ctrl+c"}
 	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "reserved") {
 		t.Fatalf("expected reserved-key error, got %v", err)
+	}
+}
+
+func TestActivityKeyConflictsWithGlobalKeys(t *testing.T) {
+	cfg := Defaults()
+	cfg.Keys.Activity.Open = []string{"q"}
+	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "while activity is focused") {
+		t.Fatalf("expected activity-scope conflict, got %v", err)
 	}
 }

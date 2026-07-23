@@ -9,9 +9,9 @@ optional full-text index is a local SQLite database.
 
 ## Features
 
-- Two-pane conversation list and transcript viewer, with a compact single-pane layout
+- Two-pane conversation list and turn-based transcript viewer, with a compact single-pane layout
 - Full-text search across user and assistant messages
-- Display of plans, reasoning summaries, commands, file changes, MCP calls, and other tool activity
+- Conversation-first reading with plans, reasoning, commands, file changes, MCP calls, and other events grouped into inspectable Activity rows
 - Resume a selected conversation with `codex resume <thread-id>`
 - Strict, versioned TOML configuration with fully customizable key bindings
 - Source and archived-conversation filters
@@ -58,11 +58,14 @@ Default keys include:
 
 | Key | Action |
 | --- | --- |
-| `j` / `k`, arrows | Move through conversations or transcript items |
+| `j` / `k`, arrows | Move through conversations or scroll transcript lines |
+| `ctrl+u` / `ctrl+d` | Scroll transcript or detail by half a page |
+| `[` / `]` | Jump to the previous or next turn |
 | `tab` | Switch pane focus |
 | `/` | Full-text search |
 | `enter` | Resume the selected conversation |
-| `space` | Expand or collapse tool details |
+| `space` | Open the selected turn's Activity inspector |
+| `esc` | Return from event detail or Activity |
 | `r` | Refresh conversations |
 | `R` | Rebuild the search index |
 | `ctrl+r` | Reload configuration without restarting |

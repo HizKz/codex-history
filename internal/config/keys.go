@@ -13,6 +13,8 @@ type KeyConfig struct {
 	Global      GlobalKeys     `toml:"global"`
 	List        ListKeys       `toml:"list"`
 	Transcript  TranscriptKeys `toml:"transcript"`
+	Activity    ActivityKeys   `toml:"activity"`
+	Detail      DetailKeys     `toml:"detail"`
 	Search      SearchKeys     `toml:"search"`
 }
 
@@ -39,11 +41,28 @@ type ListKeys struct {
 }
 
 type TranscriptKeys struct {
-	Up         []string `toml:"up"`
-	Down       []string `toml:"down"`
-	PageUp     []string `toml:"page_up"`
-	PageDown   []string `toml:"page_down"`
-	ToggleItem []string `toml:"toggle_item"`
+	Up           []string `toml:"up"`
+	Down         []string `toml:"down"`
+	PageUp       []string `toml:"page_up"`
+	PageDown     []string `toml:"page_down"`
+	PreviousTurn []string `toml:"previous_turn"`
+	NextTurn     []string `toml:"next_turn"`
+	ToggleItem   []string `toml:"toggle_item"`
+}
+
+type ActivityKeys struct {
+	Up    []string `toml:"up"`
+	Down  []string `toml:"down"`
+	Open  []string `toml:"open"`
+	Close []string `toml:"close"`
+}
+
+type DetailKeys struct {
+	Up       []string `toml:"up"`
+	Down     []string `toml:"down"`
+	PageUp   []string `toml:"page_up"`
+	PageDown []string `toml:"page_down"`
+	Close    []string `toml:"close"`
 }
 
 type SearchKeys struct {
@@ -80,7 +99,18 @@ func (k KeyConfig) Bindings() []Binding {
 		{"transcript", "down", k.Transcript.Down},
 		{"transcript", "page_up", k.Transcript.PageUp},
 		{"transcript", "page_down", k.Transcript.PageDown},
+		{"transcript", "previous_turn", k.Transcript.PreviousTurn},
+		{"transcript", "next_turn", k.Transcript.NextTurn},
 		{"transcript", "toggle_item", k.Transcript.ToggleItem},
+		{"activity", "up", k.Activity.Up},
+		{"activity", "down", k.Activity.Down},
+		{"activity", "open", k.Activity.Open},
+		{"activity", "close", k.Activity.Close},
+		{"detail", "up", k.Detail.Up},
+		{"detail", "down", k.Detail.Down},
+		{"detail", "page_up", k.Detail.PageUp},
+		{"detail", "page_down", k.Detail.PageDown},
+		{"detail", "close", k.Detail.Close},
 		{"search", "accept", k.Search.Accept},
 		{"search", "cancel", k.Search.Cancel},
 		{"search", "clear", k.Search.Clear},
@@ -131,7 +161,7 @@ func ValidateKeys(keys KeyConfig) error {
 		}
 	}
 
-	for _, activeScope := range []string{"list", "transcript"} {
+	for _, activeScope := range []string{"list", "transcript", "activity", "detail"} {
 		owners := map[string]string{}
 		for _, binding := range bindings {
 			if binding.Scope != "global" && binding.Scope != activeScope {

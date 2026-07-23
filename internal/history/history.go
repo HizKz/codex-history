@@ -25,27 +25,69 @@ type Item struct {
 type Transcript struct {
 	Thread appserver.Thread
 	Items  []Item
+	Turns  []Turn
 	Body   string
+}
+
+type Turn struct {
+	ID       string
+	Status   string
+	Primary  []Item
+	Activity []Item
 }
 
 func Build(thread appserver.Thread) Transcript {
 	var items []Item
+	var turns []Turn
 	var searchable []string
-	for _, turn := range thread.Turns {
-		for _, raw := range turn.Items {
+	for _, source := range thread.Turns {
+		turn := Turn{ID: source.ID, Status: source.Status}
+		for _, raw := range source.Items {
 			item := parseItem(raw)
 			items = append(items, item)
+			if isPrimary(item) {
+				turn.Primary = append(turn.Primary, item)
+			} else {
+				turn.Activity = append(turn.Activity, item)
+			}
 			if item.Text != "" {
 				searchable = append(searchable, item.Text)
 			}
-			if item.Kind != "commandExecution" && item.Kind != "mcpToolCall" && item.Kind != "dynamicToolCall" {
-				searchable = append(searchable, item.Title)
-			} else {
-				searchable = append(searchable, item.Title)
-			}
+			searchable = append(searchable, item.Title)
+		}
+		promoteLastAgentMessage(&turn)
+		turns = append(turns, turn)
+	}
+	return Transcript{Thread: thread, Items: items, Turns: turns, Body: strings.Join(searchable, "\n")}
+}
+
+func isPrimary(item Item) bool {
+	if item.Kind == "userMessage" {
+		return true
+	}
+	return item.Kind == "agentMessage" && (item.Status == "" || item.Status == "final_answer")
+}
+
+func promoteLastAgentMessage(turn *Turn) {
+	hasAssistant := false
+	for _, item := range turn.Primary {
+		if item.Kind == "agentMessage" {
+			hasAssistant = true
+			break
 		}
 	}
-	return Transcript{Thread: thread, Items: items, Body: strings.Join(searchable, "\n")}
+	if hasAssistant {
+		return
+	}
+	for i := len(turn.Activity) - 1; i >= 0; i-- {
+		if turn.Activity[i].Kind != "agentMessage" {
+			continue
+		}
+		item := turn.Activity[i]
+		turn.Activity = append(turn.Activity[:i], turn.Activity[i+1:]...)
+		turn.Primary = append(turn.Primary, item)
+		return
+	}
 }
 
 func Title(thread appserver.Thread) string {
