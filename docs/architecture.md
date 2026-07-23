@@ -64,8 +64,14 @@ clears inherited bindings. Key conflicts are checked for each active pane;
 
 Uses a value model with asynchronous `tea.Cmd` operations for process and disk
 I/O. Wide terminals render conversation and transcript panes together. Compact
-terminals display the focused pane. Wrapping and truncation use terminal display
-width rather than rune count so Japanese and other full-width text remain safe.
+terminals display the focused pane. The transcript preserves app-server turn
+boundaries, renders user and final assistant messages as the primary document,
+and groups intermediate messages and tool events into an Activity inspector.
+
+Transcript navigation uses wrapped logical lines with turn and Activity anchors.
+Activity opens an event list, and an event opens a separately scrollable detail
+view. Wrapping and truncation use terminal display width rather than rune count
+so Japanese and other full-width text remain safe.
 
 Resume modes are:
 

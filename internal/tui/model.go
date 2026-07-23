@@ -41,33 +41,43 @@ const (
 	focusTranscript
 )
 
+type helpSection struct {
+	scope string
+	title string
+}
+
 type model struct {
-	ctx          context.Context
-	cfg          config.Config
-	configPath   string
-	loadOptions  config.LoadOptions
-	store        *index.Store
-	client       *appserver.Client
-	threads      []appserver.Thread
-	visible      []appserver.Thread
-	selected     int
-	transcript   history.Transcript
-	transcriptID string
-	itemCursor   int
-	expanded     map[string]bool
-	query        string
-	searching    bool
-	focus        focus
-	width        int
-	height       int
-	status       string
-	err          string
-	showHelp     bool
-	loading      bool
-	indexing     bool
-	allSources   bool
-	archived     bool
-	printed      string
+	ctx              context.Context
+	cfg              config.Config
+	configPath       string
+	loadOptions      config.LoadOptions
+	store            *index.Store
+	client           *appserver.Client
+	threads          []appserver.Thread
+	visible          []appserver.Thread
+	selected         int
+	transcript       history.Transcript
+	transcriptID     string
+	transcriptView   transcriptView
+	transcriptCursor int
+	transcriptOffset int
+	activityTurn     int
+	activityCursor   int
+	detailCursor     int
+	detailOffset     int
+	query            string
+	searching        bool
+	focus            focus
+	width            int
+	height           int
+	status           string
+	err              string
+	showHelp         bool
+	loading          bool
+	indexing         bool
+	allSources       bool
+	archived         bool
+	printed          string
 }
 
 type connectedMsg struct {
@@ -113,7 +123,6 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		configPath:  opts.ConfigPath,
 		loadOptions: opts.LoadOptions,
 		store:       opts.Index,
-		expanded:    make(map[string]bool),
 		archived:    opts.Config.History.IncludeArchived,
 		status:      "Connecting to Codex…",
 	}
@@ -284,7 +293,13 @@ func (m model) reloadConfigCmd() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		oldLines := m.currentTranscriptLines()
+		oldCursor := min(max(m.transcriptCursor, 0), max(0, len(oldLines)-1))
 		m.width, m.height = msg.Width, msg.Height
+		if m.transcriptView == transcriptConversation && len(oldLines) > 0 {
+			m.transcriptCursor = resizedAnchorLine(m.currentTranscriptLines(), oldLines[oldCursor])
+			m.clampTranscriptCursor(m.currentTranscriptLines())
+		}
 	case connectedMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -316,7 +331,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if len(m.visible) > 0 && m.visible[m.selected].ID == msg.id {
-			m.transcript, m.transcriptID, m.itemCursor = msg.transcript, msg.id, 0
+			m.transcript, m.transcriptID = msg.transcript, msg.id
+			m.resetTranscriptView()
 		}
 		if m.store != nil {
 			_ = m.store.Upsert(m.ctx, msg.transcript.Thread, msg.transcript)
@@ -423,6 +439,9 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.showHelp {
 		return m, nil
 	}
+	if m.focus == focusTranscript && m.transcriptView != transcriptConversation {
+		return m.handleTranscriptKey(key)
+	}
 	switch {
 	case m.cfg.Keys.Match("global", "focus_next", key):
 		m.focus = (m.focus + 1) % 2
@@ -473,36 +492,91 @@ func (m model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	}
 	m.clampSelection()
 	if old != m.selected {
-		m.itemCursor = 0
+		m.resetTranscriptView()
 		return m, m.loadSelectedCmd()
 	}
 	return m, nil
 }
 
 func (m model) handleTranscriptKey(key string) (tea.Model, tea.Cmd) {
-	page := max(1, (m.height-8)/3)
+	switch m.transcriptView {
+	case transcriptActivity:
+		return m.handleActivityKey(key)
+	case transcriptDetail:
+		return m.handleDetailKey(key)
+	}
+
+	lines := m.currentTranscriptLines()
+	page := max(1, m.transcriptRows()/2)
 	switch {
 	case m.cfg.Keys.Match("transcript", "up", key):
-		m.itemCursor--
+		m.transcriptCursor--
 	case m.cfg.Keys.Match("transcript", "down", key):
-		m.itemCursor++
+		m.transcriptCursor++
 	case m.cfg.Keys.Match("transcript", "page_up", key):
-		m.itemCursor -= page
+		m.transcriptCursor -= page
 	case m.cfg.Keys.Match("transcript", "page_down", key):
-		m.itemCursor += page
+		m.transcriptCursor += page
+	case m.cfg.Keys.Match("transcript", "previous_turn", key):
+		m.transcriptCursor = previousTurnLine(lines, m.transcriptCursor)
+	case m.cfg.Keys.Match("transcript", "next_turn", key):
+		m.transcriptCursor = nextTurnLine(lines, m.transcriptCursor)
 	case m.cfg.Keys.Match("transcript", "toggle_item", key):
-		if m.itemCursor >= 0 && m.itemCursor < len(m.transcript.Items) {
-			item := m.transcript.Items[m.itemCursor]
-			if item.Expandable {
-				m.expanded[itemKey(item, m.itemCursor)] = !m.itemExpanded(item, m.itemCursor)
-			}
+		if m.transcriptCursor >= 0 && m.transcriptCursor < len(lines) && lines[m.transcriptCursor].Actionable {
+			m.transcriptView = transcriptActivity
+			m.activityTurn = lines[m.transcriptCursor].Turn
+			m.activityCursor = 0
 		}
 	}
-	if len(m.transcript.Items) == 0 {
-		m.itemCursor = 0
-	} else {
-		m.itemCursor = min(max(m.itemCursor, 0), len(m.transcript.Items)-1)
+	m.clampTranscriptCursor(lines)
+	return m, nil
+}
+
+func (m model) handleActivityKey(key string) (tea.Model, tea.Cmd) {
+	items := m.currentActivity()
+	switch {
+	case m.cfg.Keys.Match("activity", "close", key):
+		m.transcriptView = transcriptConversation
+	case m.cfg.Keys.Match("activity", "up", key):
+		m.activityCursor--
+	case m.cfg.Keys.Match("activity", "down", key):
+		m.activityCursor++
+	case m.cfg.Keys.Match("activity", "open", key):
+		if len(items) > 0 {
+			m.activityCursor = min(max(m.activityCursor, 0), len(items)-1)
+			m.transcriptView = transcriptDetail
+			m.detailCursor, m.detailOffset = 0, 0
+		}
 	}
+	if len(items) == 0 {
+		m.activityCursor = 0
+	} else {
+		m.activityCursor = min(max(m.activityCursor, 0), len(items)-1)
+	}
+	return m, nil
+}
+
+func (m model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
+	lines := m.currentDetailLines()
+	page := max(1, m.transcriptRows()/2)
+	switch {
+	case m.cfg.Keys.Match("detail", "close", key):
+		m.transcriptView = transcriptActivity
+	case m.cfg.Keys.Match("detail", "up", key):
+		m.detailCursor--
+	case m.cfg.Keys.Match("detail", "down", key):
+		m.detailCursor++
+	case m.cfg.Keys.Match("detail", "page_up", key):
+		m.detailCursor -= page
+	case m.cfg.Keys.Match("detail", "page_down", key):
+		m.detailCursor += page
+	}
+	if len(lines) == 0 {
+		m.detailCursor = 0
+	} else {
+		m.detailCursor = min(max(m.detailCursor, 0), len(lines)-1)
+	}
+	m.detailOffset = visibleStart(m.detailOffset, m.detailCursor, m.transcriptRows(), len(lines))
 	return m, nil
 }
 
@@ -559,6 +633,119 @@ func (m *model) clampSelection() {
 		return
 	}
 	m.selected = min(max(m.selected, 0), len(m.visible)-1)
+}
+
+func (m *model) resetTranscriptView() {
+	m.transcriptView = transcriptConversation
+	m.transcriptCursor = 0
+	m.transcriptOffset = 0
+	m.activityTurn = 0
+	m.activityCursor = 0
+	m.detailCursor = 0
+	m.detailOffset = 0
+}
+
+func (m model) compactLayout() bool {
+	return max(m.width, 60) < m.cfg.UI.CompactBreakpoint
+}
+
+func (m model) transcriptPanelWidth() int {
+	width := max(m.width, 60)
+	if m.compactLayout() {
+		return width
+	}
+	leftWidth := max(30, min(48, width*38/100))
+	return max(30, width-leftWidth-1)
+}
+
+func (m model) transcriptContentWidth() int {
+	return max(4, m.transcriptPanelWidth()-4)
+}
+
+func (m model) transcriptRows() int {
+	height := max(m.height, 16)
+	bodyHeight := max(5, height-4)
+	innerHeight := max(2, bodyHeight-2)
+	return max(1, innerHeight-1)
+}
+
+func (m model) currentTranscriptLines() []transcriptLine {
+	return buildTranscriptLines(
+		m.transcript,
+		m.transcriptContentWidth(),
+		m.cfg.UI.ToolDetails == "expanded",
+	)
+}
+
+func (m *model) clampTranscriptCursor(lines []transcriptLine) {
+	if len(lines) == 0 {
+		m.transcriptCursor, m.transcriptOffset = 0, 0
+		return
+	}
+	m.transcriptCursor = min(max(m.transcriptCursor, 0), len(lines)-1)
+	m.transcriptOffset = visibleStart(
+		m.transcriptOffset,
+		m.transcriptCursor,
+		m.transcriptRows(),
+		len(lines),
+	)
+}
+
+func (m model) currentActivity() []history.Item {
+	if m.activityTurn < 0 || m.activityTurn >= len(m.transcript.Turns) {
+		return nil
+	}
+	return m.transcript.Turns[m.activityTurn].Activity
+}
+
+func (m model) currentDetailLines() []string {
+	items := m.currentActivity()
+	if m.activityCursor < 0 || m.activityCursor >= len(items) {
+		return nil
+	}
+	return detailLines(items[m.activityCursor], m.transcriptContentWidth())
+}
+
+func previousTurnLine(lines []transcriptLine, cursor int) int {
+	if len(lines) == 0 {
+		return 0
+	}
+	cursor = min(max(cursor, 0), len(lines)-1)
+	currentTurn := lines[cursor].Turn
+	for i := cursor; i >= 0; i-- {
+		if lines[i].TurnStart && lines[i].Turn < currentTurn {
+			return i
+		}
+	}
+	return 0
+}
+
+func nextTurnLine(lines []transcriptLine, cursor int) int {
+	if len(lines) == 0 {
+		return 0
+	}
+	cursor = min(max(cursor, 0), len(lines)-1)
+	currentTurn := lines[cursor].Turn
+	for i := cursor + 1; i < len(lines); i++ {
+		if lines[i].TurnStart && lines[i].Turn > currentTurn {
+			return i
+		}
+	}
+	return len(lines) - 1
+}
+
+func resizedAnchorLine(lines []transcriptLine, anchor transcriptLine) int {
+	for i, line := range lines {
+		if line.Turn == anchor.Turn && line.Activity == anchor.Activity && line.Role == anchor.Role {
+			return i
+		}
+	}
+	for i, line := range lines {
+		if line.Turn == anchor.Turn && line.TurnStart {
+			return i
+		}
+	}
+	return 0
 }
 
 func (m *model) applySearch(indexedIDs []string) {
@@ -623,13 +810,17 @@ func (m model) render() string {
 
 func (m model) renderHeader(width int) string {
 	title := m.accentStyle().Bold(true).Render("codex-history")
-	mode := fmt.Sprintf("sources:%s  archived:%t", map[bool]string{true: "all", false: "config"}[m.allSources], m.archived)
+	mode := fmt.Sprintf(
+		"sources %s  ·  archived %s",
+		map[bool]string{true: "all", false: "config"}[m.allSources],
+		map[bool]string{true: "on", false: "off"}[m.archived],
+	)
 	if m.indexing {
-		mode += "  indexing…"
+		mode += "  ·  indexing…"
 	}
 	search := ""
 	if m.searching || m.query != "" {
-		search = "  / " + m.query
+		search = "  ·  search: " + m.query
 		if m.searching {
 			search += "▌"
 		}
@@ -640,7 +831,11 @@ func (m model) renderHeader(width int) string {
 
 func (m model) renderList(width, height int) string {
 	active := m.focus == focusList
-	title := fmt.Sprintf(" Conversations (%d) ", len(m.visible))
+	name := "Conversations"
+	if m.compactLayout() {
+		name += " 1/2"
+	}
+	title := panelTitle(name, active, fmt.Sprintf("%d", len(m.visible)))
 	innerWidth := max(10, width-2)
 	innerHeight := max(2, height-2)
 	rows := max(1, innerHeight-1)
@@ -662,10 +857,17 @@ func (m model) renderList(width, height int) string {
 			when = " " + time.Unix(thread.UpdatedAt, 0).Format(m.cfg.UI.DateFormat)
 			reserved = utf8.RuneCountInString(when)
 		}
+		if i == m.selected {
+			if thread.Archived {
+				marker = "›A"
+			} else {
+				marker = "› "
+			}
+		}
 		text := marker + truncate(history.Title(thread), max(8, innerWidth-4-reserved)) + when
 		style := lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth)
 		if i == m.selected {
-			style = applyForeground(style, m.semanticColor("selected", m.cfg.UI.Colors.Selected)).Bold(true).Reverse(true)
+			style = applyForeground(style, m.semanticColor("selected", m.cfg.UI.Colors.Selected)).Bold(true)
 		}
 		lines = append(lines, style.Render(text))
 	}
@@ -680,76 +882,178 @@ func (m model) renderTranscript(width, height int) string {
 	innerWidth := max(10, width-2)
 	innerHeight := max(2, height-2)
 	rows := max(1, innerHeight-1)
-	title := " Transcript "
 	if m.transcriptID == "" {
+		name := "Transcript"
+		if m.compactLayout() {
+			name += " 2/2"
+		}
+		title := panelTitle(name, active, "")
 		return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + m.mutedStyle().Render("Select a conversation"))
 	}
-	blocks := make([][]string, 0, len(m.transcript.Items))
-	for i, item := range m.transcript.Items {
-		marker := "  "
-		if item.Expandable {
-			if m.itemExpanded(item, i) {
-				marker = "▼ "
-			} else {
-				marker = "▶ "
-			}
-		}
-		heading := marker + item.Title
-		if item.Status != "" {
-			heading += "  [" + item.Status + "]"
-		}
-		headingStyle := lipgloss.NewStyle()
-		switch item.Role {
-		case "user":
-			headingStyle = applyForeground(headingStyle, m.semanticColor("user", m.cfg.UI.Colors.User))
-		case "assistant":
-			headingStyle = applyForeground(headingStyle, m.semanticColor("assistant", m.cfg.UI.Colors.Assistant))
-		}
-		headingLines := wrapLines(heading, max(4, innerWidth-2))
-		for i := range headingLines {
-			headingLines[i] = headingStyle.Render(headingLines[i])
-		}
-		block := headingLines
-		for _, line := range wrapLines(item.Text, max(4, innerWidth-4)) {
-			block = append(block, "  "+line)
-		}
-		if m.itemExpanded(item, i) {
-			for _, line := range wrapLines(item.Detail, max(4, innerWidth-4)) {
-				block = append(block, "  "+line)
-			}
-		}
-		if i == m.itemCursor {
-			for j := range block {
-				block[j] = lipgloss.NewStyle().Reverse(true).Width(innerWidth).MaxWidth(innerWidth).Render(block[j])
-			}
-		}
-		blocks = append(blocks, block)
+	switch m.transcriptView {
+	case transcriptActivity:
+		return m.renderActivityPanel(active, innerWidth, innerHeight, rows)
+	case transcriptDetail:
+		return m.renderDetailPanel(active, innerWidth, innerHeight, rows)
+	default:
+		return m.renderConversationPanel(active, innerWidth, innerHeight, rows)
 	}
-	startItem := min(max(m.itemCursor, 0), max(0, len(blocks)-1))
-	var lines []string
-	for i := startItem; i < len(blocks) && len(lines) < rows; i++ {
-		lines = append(lines, blocks[i]...)
+}
+
+func (m model) renderConversationPanel(active bool, innerWidth, innerHeight, rows int) string {
+	contentWidth := max(4, innerWidth-2)
+	logical := buildTranscriptLines(m.transcript, contentWidth, m.cfg.UI.ToolDetails == "expanded")
+	cursor := 0
+	if len(logical) > 0 {
+		cursor = min(max(m.transcriptCursor, 0), len(logical)-1)
 	}
-	if len(lines) > rows {
-		lines = lines[:rows]
+	start := visibleStart(m.transcriptOffset, cursor, rows, len(logical))
+	end := min(len(logical), start+rows)
+	lines := make([]string, 0, rows)
+	for i := start; i < end; i++ {
+		line := logical[i]
+		gutter := "  "
+		if i == cursor {
+			gutter = m.accentStyle().Bold(true).Render("▌ ")
+		}
+		style := lipgloss.NewStyle()
+		switch line.Role {
+		case lineMuted:
+			style = m.mutedStyle()
+		case lineUser:
+			style = applyForeground(style, m.semanticColor("user", m.cfg.UI.Colors.User)).Bold(true)
+		case lineAssistant:
+			style = applyForeground(style, m.semanticColor("assistant", m.cfg.UI.Colors.Assistant)).Bold(true)
+		case lineActivity:
+			style = m.accentStyle().Bold(true)
+		}
+		text := truncate(line.Text, contentWidth)
+		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(gutter+style.Render(text)))
 	}
 	for len(lines) < rows {
 		lines = append(lines, "")
 	}
+	name := "Transcript"
+	if m.compactLayout() {
+		name += " 2/2"
+	}
+	position := "0/0"
+	if len(logical) > 0 {
+		position = fmt.Sprintf("%d/%d", cursor+1, len(logical))
+	}
+	title := panelTitle(name, active, position)
 	return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + strings.Join(lines, "\n"))
+}
+
+func (m model) renderActivityPanel(active bool, innerWidth, innerHeight, rows int) string {
+	items := m.currentActivity()
+	cursor := 0
+	if len(items) > 0 {
+		cursor = min(max(m.activityCursor, 0), len(items)-1)
+	}
+	start := visibleStart(0, cursor, rows, len(items))
+	end := min(len(items), start+rows)
+	lines := make([]string, 0, rows)
+	for i := start; i < end; i++ {
+		gutter := "  "
+		style := lipgloss.NewStyle()
+		if i == cursor {
+			gutter = "› "
+			style = m.accentStyle().Bold(true)
+		}
+		text := truncate(activityEventLabel(i, items[i]), max(4, innerWidth-2))
+		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(gutter+style.Render(text)))
+	}
+	if len(items) == 0 {
+		lines = append(lines, m.mutedStyle().Render("No activity"))
+	}
+	for len(lines) < rows {
+		lines = append(lines, "")
+	}
+	title := panelTitle(
+		fmt.Sprintf("Activity · Turn %d", m.activityTurn+1),
+		active,
+		fmt.Sprintf("%d", len(items)),
+	)
+	return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + strings.Join(lines, "\n"))
+}
+
+func (m model) renderDetailPanel(active bool, innerWidth, innerHeight, rows int) string {
+	items := m.currentActivity()
+	if len(items) == 0 {
+		title := panelTitle("Detail", active, "")
+		return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + m.mutedStyle().Render("No details"))
+	}
+	itemIndex := min(max(m.activityCursor, 0), len(items)-1)
+	logical := detailLines(items[itemIndex], max(4, innerWidth-2))
+	cursor := min(max(m.detailCursor, 0), max(0, len(logical)-1))
+	start := visibleStart(m.detailOffset, cursor, rows, len(logical))
+	end := min(len(logical), start+rows)
+	lines := make([]string, 0, rows)
+	for i := start; i < end; i++ {
+		gutter := "  "
+		if i == cursor {
+			gutter = m.accentStyle().Bold(true).Render("▌ ")
+		}
+		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(gutter+logical[i]))
+	}
+	for len(lines) < rows {
+		lines = append(lines, "")
+	}
+	position := fmt.Sprintf("%d/%d", cursor+1, max(1, len(logical)))
+	title := panelTitle("Detail · "+truncate(items[itemIndex].Title, max(8, innerWidth-20)), active, position)
+	return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + strings.Join(lines, "\n"))
+}
+
+func panelTitle(name string, active bool, extra string) string {
+	prefix := " "
+	if active {
+		prefix = " ▶ "
+	}
+	if extra != "" {
+		return fmt.Sprintf("%s%s · %s ", prefix, name, extra)
+	}
+	return prefix + name + " "
 }
 
 func (m model) renderHelp() string {
 	var lines []string
 	lines = append(lines, m.accentStyle().Bold(true).Render("codex-history key bindings"), "")
-	for _, binding := range m.cfg.Keys.Bindings() {
-		if len(binding.Keys) == 0 {
-			continue
+	bindings := m.cfg.Keys.Bindings()
+	for _, section := range m.helpSections() {
+		var sectionLines []string
+		for _, binding := range bindings {
+			if binding.Scope != section.scope || len(binding.Keys) == 0 {
+				continue
+			}
+			sectionLines = append(sectionLines, fmt.Sprintf("%-24s %s", bindingLabel(binding.Action), strings.Join(binding.Keys, ", ")))
 		}
-		lines = append(lines, fmt.Sprintf("%-28s %s", binding.Scope+"."+binding.Action, strings.Join(binding.Keys, ", ")))
+		if len(sectionLines) > 0 {
+			lines = append(lines, section.title)
+			lines = append(lines, sectionLines...)
+			lines = append(lines, "")
+		}
 	}
-	lines = append(lines, "", "ctrl+c is always available as an emergency exit.", "Press ? to close help.")
+	lines = append(lines, "ctrl+c is always available as an emergency exit.", "Press the help key to close.")
 	return lipgloss.NewStyle().Padding(1, 2).Render(strings.Join(lines, "\n"))
+}
+
+func (m model) helpSections() []helpSection {
+	sections := []helpSection{{"global", "GLOBAL"}}
+	if m.focus == focusList {
+		return append(sections,
+			helpSection{"list", "CONVERSATIONS"},
+			helpSection{"search", "SEARCH"},
+		)
+	}
+	switch m.transcriptView {
+	case transcriptActivity:
+		return append(sections, helpSection{"activity", "ACTIVITY"})
+	case transcriptDetail:
+		return append(sections, helpSection{"detail", "DETAIL"})
+	default:
+		return append(sections, helpSection{"transcript", "TRANSCRIPT"})
+	}
 }
 
 func (m model) footerText() string {
@@ -757,12 +1061,103 @@ func (m model) footerText() string {
 		return "error: " + m.err
 	}
 	if m.searching {
-		return "type to search • enter accept • esc cancel • ctrl+u clear"
+		return strings.Join(compactHints(
+			"type to search",
+			m.keyHint("search", "accept", "accept"),
+			m.keyHint("search", "cancel", "cancel"),
+			m.keyHint("search", "clear", "clear"),
+		), " • ")
 	}
-	if m.cfg.UI.ShowHelp {
-		return m.status + "  •  tab focus • / search • enter resume • ? help • q quit"
+	if !m.cfg.UI.ShowHelp {
+		return m.status
 	}
-	return m.status
+	var hints []string
+	if m.focus == focusList {
+		hints = compactHints(
+			m.keyPairHint("list", "down", "up", "move"),
+			m.keyHint("list", "resume", "resume"),
+			m.keyHint("global", "focus_next", "transcript"),
+			m.keyHint("global", "search", "search"),
+			m.keyHint("global", "help", "help"),
+		)
+	} else {
+		switch m.transcriptView {
+		case transcriptActivity:
+			hints = compactHints(
+				m.keyPairHint("activity", "down", "up", "move"),
+				m.keyHint("activity", "open", "open"),
+				m.keyHint("activity", "close", "back"),
+				m.keyHint("global", "help", "help"),
+			)
+		case transcriptDetail:
+			hints = compactHints(
+				m.keyPairHint("detail", "down", "up", "scroll"),
+				m.keyPairHint("detail", "page_up", "page_down", "page"),
+				m.keyHint("detail", "close", "back"),
+				m.keyHint("global", "help", "help"),
+			)
+		default:
+			hints = compactHints(
+				m.keyPairHint("transcript", "down", "up", "scroll"),
+				m.keyPairHint("transcript", "page_up", "page_down", "page"),
+				m.keyPairHint("transcript", "previous_turn", "next_turn", "turn"),
+				m.keyHint("transcript", "toggle_item", "activity"),
+				m.keyHint("global", "focus_next", "list"),
+				m.keyHint("global", "help", "help"),
+			)
+		}
+	}
+	actions := strings.Join(hints, " • ")
+	if m.status == "" {
+		return actions
+	}
+	return m.status + "  •  " + actions
+}
+
+func (m model) keyHint(scope, action, label string) string {
+	keys := m.cfg.Keys.KeysFor(scope, action)
+	if len(keys) == 0 {
+		return ""
+	}
+	return keys[0] + " " + label
+}
+
+func (m model) keyPairHint(scope, firstAction, secondAction, label string) string {
+	first := m.cfg.Keys.KeysFor(scope, firstAction)
+	second := m.cfg.Keys.KeysFor(scope, secondAction)
+	if len(first) == 0 || len(second) == 0 {
+		return ""
+	}
+	return first[0] + "/" + second[0] + " " + label
+}
+
+func compactHints(values ...string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func bindingLabel(action string) string {
+	labels := map[string]string{
+		"focus_next":      "Switch pane",
+		"rebuild_index":   "Rebuild index",
+		"reload_config":   "Reload config",
+		"toggle_sources":  "Toggle sources",
+		"toggle_archived": "Toggle archived",
+		"page_up":         "Page up",
+		"page_down":       "Page down",
+		"previous_turn":   "Previous turn",
+		"next_turn":       "Next turn",
+		"toggle_item":     "Open activity",
+	}
+	if label := labels[action]; label != "" {
+		return label
+	}
+	return strings.ToUpper(action[:1]) + strings.ReplaceAll(action[1:], "_", " ")
 }
 
 func (m model) panelStyle(active bool) lipgloss.Style {
@@ -817,20 +1212,6 @@ func applyForeground(style lipgloss.Style, color string) lipgloss.Style {
 		color = ansi
 	}
 	return style.Foreground(lipgloss.Color(color))
-}
-
-func itemKey(item history.Item, index int) string {
-	if item.ID != "" {
-		return item.ID
-	}
-	return fmt.Sprintf("%s:%d", item.Kind, index)
-}
-
-func (m model) itemExpanded(item history.Item, i int) bool {
-	if value, ok := m.expanded[itemKey(item, i)]; ok {
-		return value
-	}
-	return m.cfg.UI.ToolDetails == "expanded"
 }
 
 func wrapLines(text string, width int) []string {

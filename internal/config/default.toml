@@ -12,6 +12,7 @@ theme = "terminal"
 show_help = true
 show_timestamps = true
 date_format = "2006-01-02 15:04"
+# collapsed shows one Activity row per turn; expanded also shows event summaries.
 tool_details = "collapsed"
 compact_breakpoint = 100
 
@@ -70,9 +71,24 @@ resume = ["enter"]
 [keys.transcript]
 up = ["k", "up"]
 down = ["j", "down"]
-page_up = ["pgup"]
-page_down = ["pgdown"]
+page_up = ["ctrl+u", "pgup"]
+page_down = ["ctrl+d", "pgdown"]
+previous_turn = ["["]
+next_turn = ["]"]
 toggle_item = ["space"]
+
+[keys.activity]
+up = ["k", "up"]
+down = ["j", "down"]
+open = ["enter"]
+close = ["esc"]
+
+[keys.detail]
+up = ["k", "up"]
+down = ["j", "down"]
+page_up = ["ctrl+u", "pgup"]
+page_down = ["ctrl+d", "pgdown"]
+close = ["esc"]
 
 [keys.search]
 accept = ["enter"]
