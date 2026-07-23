@@ -64,9 +64,14 @@ clears inherited bindings. Key conflicts are checked for each active pane;
 
 Uses a value model with asynchronous `tea.Cmd` operations for process and disk
 I/O. Wide terminals render conversation and transcript panes together. Compact
-terminals display the focused pane. The transcript preserves app-server turn
-boundaries, renders user and final assistant messages as the primary document,
-and groups intermediate messages and tool events into an Activity inspector.
+terminals display the focused pane. Conversation entries use a two-line layout
+with emphasized titles and subdued working-directory, source, and timestamp
+metadata. The selected entry emphasizes both rows as a single block.
+The transcript preserves app-server turn boundaries, renders user and final
+assistant messages as the primary document, and groups intermediate messages
+and tool events into an Activity inspector.
+Turn headings, messages, and Activity summaries are separated by blank lines so
+each conversation block remains visually distinct.
 
 Transcript navigation uses wrapped logical lines with turn and Activity anchors.
 Activity opens an event list, and an event opens a separately scrollable detail
