@@ -1,19 +1,23 @@
 # Releasing
 
-Releases are intentionally manual at the approval boundary. Pushing a `v*` tag
-starts GoReleaser, but the GitHub release remains a draft for review.
+Releases are manual at the tag boundary and automated after it. Pushing a valid
+`v*` tag from `main` verifies the release, publishes it with GoReleaser, updates
+the Homebrew Cask, and checks the installed Cask on a macOS runner.
 
 ## Prerequisites
 
 - A clean `main` branch with successful GitHub Actions.
 - Go, Nix, and GoReleaser available.
 - The `HizKz/homebrew-tap` repository exists.
-- `HOMEBREW_TAP_GITHUB_TOKEN` is configured as a repository Actions secret with
-  Contents read/write permission scoped to the tap repository.
+- `HOMEBREW_TAP_GITHUB_TOKEN` is configured as a repository Actions secret. Use
+  a fine-grained personal access token scoped only to `HizKz/homebrew-tap` with
+  repository Contents read/write permission.
 
 ## Prepare
 
-1. Choose a SemVer version and update `CHANGELOG.md`.
+1. Choose a SemVer version and move the relevant entries from `[Unreleased]` to
+   a dated version section in `CHANGELOG.md`. Add its comparison link at the
+   bottom of the file.
 2. Confirm the Go module remains `github.com/HizKz/codex-history`.
 3. Run:
 
@@ -29,17 +33,40 @@ starts GoReleaser, but the GitHub release remains a draft for review.
 
 ## Tag and publish
 
-Only after explicit authorization:
+Pushing the tag is the release approval. Only do this after explicit
+authorization:
 
 ```sh
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-The release workflow builds CGO-free Darwin and Linux archives for amd64 and
-arm64, writes checksums, creates a draft GitHub release, and updates the
-Homebrew Cask. Review artifact names, checksums, generated Cask content, and
-installation on at least one supported platform before publishing the draft.
+The workflow rejects tags that are not SemVer-shaped, do not point to a commit
+contained in `main`, or do not have a dated changelog section and release link.
+It then runs race tests, vet, staticcheck, and `goreleaser check` before using
+either publishing token.
+
+For a stable tag, GoReleaser builds CGO-free Darwin and Linux archives for amd64
+and arm64, writes `checksums.txt`, publishes a non-draft GitHub release, and
+updates the Homebrew Cask. A final macOS job installs
+`HizKz/tap/codex-history` and confirms that `codex-history --version` matches
+the tag.
+
+A tag such as `vX.Y.Z-rc.1` is published automatically as a GitHub prerelease.
+It does not update the stable Homebrew Cask and skips the Homebrew installation
+check.
+
+## Failure recovery
+
+- Validation failures have no release or tap side effects. Fix `main` and use a
+  new version tag. Do not force-move a published tag.
+- If a transient service failure occurs before publication, rerun the failed
+  workflow job only after confirming that no conflicting release assets were
+  created.
+- If the GitHub release exists or the Homebrew smoke test fails, do not replace
+  its artifacts or roll back the tag automatically. Correct the tap when the
+  release artifacts are valid, or publish the fix as a new patch release.
+- Never delete, move, or republish a release tag without explicit authorization.
 
 ## Nixpkgs follow-up
 

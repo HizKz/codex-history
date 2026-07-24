@@ -5,20 +5,118 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  goreleaser:
+  validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - name: Validate tag, branch, and changelog
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          semver_pattern='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$'
+          if [[ ! "${tag}" =~ ${semver_pattern} ]]; then
+            echo "::error::release tag must be vMAJOR.MINOR.PATCH with an optional SemVer prerelease"
+            exit 1
+          fi
+
+          prerelease_id="${BASH_REMATCH[5]:-}"
+          if [[ -n "${prerelease_id}" ]]; then
+            IFS='.' read -ra identifiers <<< "${prerelease_id}"
+            for identifier in "${identifiers[@]}"; do
+              if [[ "${identifier}" =~ ^0[0-9]+$ ]]; then
+                echo "::error::numeric prerelease identifiers must not contain leading zeroes"
+                exit 1
+              fi
+            done
+          fi
+
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          release_commit="$(git rev-list -n 1 "${tag}")"
+          if ! git merge-base --is-ancestor "${release_commit}" origin/main; then
+            echo "::error::release tag must point to a commit contained in main"
+            exit 1
+          fi
+
+          version="${tag#v}"
+          escaped_version="${version//./\\.}"
+          if ! grep -Eq "^## \[${escaped_version}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md must contain a dated section for ${version}"
+            exit 1
+          fi
+          if ! awk -v needle="[${version}]:" '$1 == needle { found = 1 } END { exit !found }' CHANGELOG.md; then
+            echo "::error::CHANGELOG.md must contain a release link for ${version}"
+            exit 1
+          fi
+
+          if [[ -n "${prerelease_id}" ]]; then
+            echo "prerelease=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "prerelease=false" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - uses: goreleaser/goreleaser-action@v6
+      - name: Test
+        run: go test -race ./...
+      - name: Vet
+        run: go vet ./...
+      - uses: dominikh/staticcheck-action@v1
+        with:
+          version: latest
+          install-go: false
+      - name: Staticcheck
+        run: staticcheck ./...
+      - name: Check GoReleaser configuration
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: check
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check Homebrew tap token
+        if: needs.validate.outputs.prerelease == 'false'
+        shell: bash
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [[ -z "${HOMEBREW_TAP_GITHUB_TOKEN}" ]]; then
+            echo "::error::HOMEBREW_TAP_GITHUB_TOKEN is not configured"
+            exit 1
+          fi
+      - name: Publish GitHub release and Homebrew Cask
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: '~> v2'
@@ -26,3 +124,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+  homebrew-smoke:
+    needs: [validate, publish]
+    if: needs.validate.outputs.prerelease == 'false'
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Install the released Cask
+        run: brew install --cask HizKz/tap/codex-history
+      - name: Verify the installed version
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          binary="$(brew --prefix)/bin/codex-history"
+          test -x "${binary}"
+          actual="$("${binary}" --version)"
+          if [[ "${actual}" != "codex-history ${EXPECTED_VERSION} "* ]]; then
+            echo "::error::installed version does not match ${EXPECTED_VERSION}: ${actual}"
+            exit 1
+          fi

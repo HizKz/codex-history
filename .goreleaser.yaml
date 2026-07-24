@@ -4,7 +4,7 @@ project_name: codex-history
 
 before:
   hooks:
-    - go mod tidy
+    - go mod tidy -diff
 
 builds:
   - id: codex-history
@@ -38,6 +38,7 @@ changelog:
 homebrew_casks:
   - name: codex-history
     binaries: [codex-history]
+    skip_upload: auto
     repository:
       owner: HizKz
       name: homebrew-tap
@@ -54,4 +55,5 @@ homebrew_casks:
           end
 
 release:
-  draft: true
+  draft: false
+  prerelease: auto
