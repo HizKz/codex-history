@@ -10,6 +10,7 @@ import (
 	"github.com/HizKz/codex-history/internal/appserver"
 	"github.com/HizKz/codex-history/internal/config"
 	"github.com/HizKz/codex-history/internal/history"
+	"github.com/HizKz/codex-history/internal/index"
 )
 
 func TestShellCommandQuotesArguments(t *testing.T) {
@@ -274,6 +275,115 @@ func TestLongTranscriptCanReachLastLine(t *testing.T) {
 	}
 	if m.transcriptCursor != len(lines)-1 {
 		t.Fatalf("cursor stopped at %d of %d", m.transcriptCursor, len(lines))
+	}
+}
+
+func TestSearchKeepsRankedResultsAndRendersMatchContext(t *testing.T) {
+	m := transcriptTestModel()
+	m.focus = focusList
+	m.query = "日本語"
+	m.threads = []appserver.Thread{
+		{ID: "body", Preview: "Body match", CWD: "/work/alpha"},
+		{ID: "title", Preview: "Title match", CWD: "/work/beta"},
+	}
+	m.searchResults = []index.Result{
+		{
+			ID: "title", Match: index.MatchTitle,
+			Snippet: []index.SnippetSegment{{Text: "before "}, {Text: "日本語", Matched: true}, {Text: " after"}},
+		},
+		{
+			ID: "body", Match: index.MatchBody,
+			Snippet: []index.SnippetSegment{{Text: "message "}, {Text: "日本語", Matched: true}},
+		},
+	}
+	m.applyCurrentFilters()
+	if len(m.visible) != 2 || m.visible[0].ID != "title" || m.visible[1].ID != "body" {
+		t.Fatalf("ranked visible threads = %#v", m.visible)
+	}
+	rendered := stripSGR(m.renderList(48, 10))
+	for _, want := range []string{"title · before 日本語 after", "message · message 日本語"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("search result missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
+func TestSearchIgnoresStaleAsyncResults(t *testing.T) {
+	m := transcriptTestModel()
+	m.query, m.searchGeneration = "current", 2
+	m.threads = []appserver.Thread{{ID: "current"}, {ID: "stale"}}
+	m.visible = m.threads
+
+	next, cmd := m.Update(searchMsg{
+		query: "stale", generation: 1,
+		results: []index.Result{{ID: "stale"}},
+	})
+	got := next.(model)
+	if cmd != nil || len(got.visible) != 2 {
+		t.Fatalf("stale result changed model: visible=%#v cmd=%v", got.visible, cmd)
+	}
+
+	_, cmd = got.Update(searchDelayMsg{query: "stale", generation: 1})
+	if cmd != nil {
+		t.Fatal("stale debounce scheduled a search")
+	}
+}
+
+func TestProjectPickerFiltersExactCWDAndCombinesWithSearch(t *testing.T) {
+	m := transcriptTestModel()
+	m.focus = focusList
+	m.threads = []appserver.Thread{
+		{ID: "one", Preview: "Needle one", CWD: "/work/one/demo"},
+		{ID: "two", Preview: "Needle two", CWD: "/work/two/demo"},
+		{ID: "other", Preview: "Other", CWD: "/work/other"},
+	}
+	m.visible = m.threads
+
+	next, _ := m.handleKey(tea.KeyPressMsg{Code: 'p'})
+	m = next.(model)
+	if !m.projectOpen {
+		t.Fatal("project picker did not open")
+	}
+	options := m.projectOptions()
+	if len(options) != 4 || options[0].CWD != "" || options[1].CWD != "/work/one/demo" || options[2].CWD != "/work/two/demo" {
+		t.Fatalf("project options = %#v", options)
+	}
+
+	m.projectCursor = 2
+	next, _ = m.handleProjectKey("enter")
+	m = next.(model)
+	if m.projectCWD != "/work/two/demo" || len(m.visible) != 1 || m.visible[0].ID != "two" {
+		t.Fatalf("project filter = %q, visible=%#v", m.projectCWD, m.visible)
+	}
+
+	m.query = "Needle"
+	m.searchResults = []index.Result{
+		{ID: "one", Match: index.MatchPreview, Snippet: []index.SnippetSegment{{Text: "Needle", Matched: true}}},
+		{ID: "two", Match: index.MatchPreview, Snippet: []index.SnippetSegment{{Text: "Needle", Matched: true}}},
+	}
+	m.applyCurrentFilters()
+	if len(m.visible) != 1 || m.visible[0].ID != "two" {
+		t.Fatalf("combined project search = %#v", m.visible)
+	}
+}
+
+func TestProjectPickerRenderAndMissingProjectReset(t *testing.T) {
+	m := transcriptTestModel()
+	m.threads = []appserver.Thread{
+		{ID: "jp", CWD: "/work/日本語プロジェクト"},
+		{ID: "other", CWD: "/work/other"},
+	}
+	m.openProjectPicker()
+	rendered := stripSGR(m.render())
+	for _, want := range []string{"Select project", "All projects", "日本語プロジェクト", "enter select", "esc cancel"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("project picker missing %q:\n%s", want, rendered)
+		}
+	}
+
+	m.projectCWD = "/work/missing"
+	if !m.clearMissingProject() || m.projectCWD != "" {
+		t.Fatalf("missing project was not reset: %q", m.projectCWD)
 	}
 }
 

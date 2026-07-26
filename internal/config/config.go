@@ -160,6 +160,7 @@ func Decode(r io.Reader) (Config, error) {
 	if err := decoder.Decode(&cfg); err != nil {
 		return Config{}, err
 	}
+	ResolveInheritedKeyConflicts(&cfg.Keys, probe)
 	if err := Validate(cfg); err != nil {
 		return Config{}, err
 	}

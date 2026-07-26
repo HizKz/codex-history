@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -16,6 +17,7 @@ type KeyConfig struct {
 	Activity    ActivityKeys   `toml:"activity"`
 	Detail      DetailKeys     `toml:"detail"`
 	Search      SearchKeys     `toml:"search"`
+	Project     ProjectKeys    `toml:"project"`
 }
 
 type GlobalKeys struct {
@@ -28,6 +30,7 @@ type GlobalKeys struct {
 	ReloadConfig   []string `toml:"reload_config"`
 	ToggleSources  []string `toml:"toggle_sources"`
 	ToggleArchived []string `toml:"toggle_archived"`
+	FilterProject  []string `toml:"filter_project"`
 }
 
 type ListKeys struct {
@@ -71,6 +74,13 @@ type SearchKeys struct {
 	Clear  []string `toml:"clear"`
 }
 
+type ProjectKeys struct {
+	Up     []string `toml:"up"`
+	Down   []string `toml:"down"`
+	Accept []string `toml:"accept"`
+	Cancel []string `toml:"cancel"`
+}
+
 type Binding struct {
 	Scope  string
 	Action string
@@ -78,43 +88,11 @@ type Binding struct {
 }
 
 func (k KeyConfig) Bindings() []Binding {
-	return []Binding{
-		{"global", "quit", k.Global.Quit},
-		{"global", "help", k.Global.Help},
-		{"global", "focus_next", k.Global.FocusNext},
-		{"global", "search", k.Global.Search},
-		{"global", "refresh", k.Global.Refresh},
-		{"global", "rebuild_index", k.Global.RebuildIndex},
-		{"global", "reload_config", k.Global.ReloadConfig},
-		{"global", "toggle_sources", k.Global.ToggleSources},
-		{"global", "toggle_archived", k.Global.ToggleArchived},
-		{"list", "up", k.List.Up},
-		{"list", "down", k.List.Down},
-		{"list", "page_up", k.List.PageUp},
-		{"list", "page_down", k.List.PageDown},
-		{"list", "first", k.List.First},
-		{"list", "last", k.List.Last},
-		{"list", "resume", k.List.Resume},
-		{"transcript", "up", k.Transcript.Up},
-		{"transcript", "down", k.Transcript.Down},
-		{"transcript", "page_up", k.Transcript.PageUp},
-		{"transcript", "page_down", k.Transcript.PageDown},
-		{"transcript", "previous_turn", k.Transcript.PreviousTurn},
-		{"transcript", "next_turn", k.Transcript.NextTurn},
-		{"transcript", "toggle_item", k.Transcript.ToggleItem},
-		{"activity", "up", k.Activity.Up},
-		{"activity", "down", k.Activity.Down},
-		{"activity", "open", k.Activity.Open},
-		{"activity", "close", k.Activity.Close},
-		{"detail", "up", k.Detail.Up},
-		{"detail", "down", k.Detail.Down},
-		{"detail", "page_up", k.Detail.PageUp},
-		{"detail", "page_down", k.Detail.PageDown},
-		{"detail", "close", k.Detail.Close},
-		{"search", "accept", k.Search.Accept},
-		{"search", "cancel", k.Search.Cancel},
-		{"search", "clear", k.Search.Clear},
-	}
+	var bindings []Binding
+	visitBindingFields(&k, func(scope, action string, keys *[]string) {
+		bindings = append(bindings, Binding{Scope: scope, Action: action, Keys: *keys})
+	})
+	return bindings
 }
 
 func (k KeyConfig) KeysFor(scope, action string) []string {
@@ -161,10 +139,11 @@ func ValidateKeys(keys KeyConfig) error {
 		}
 	}
 
-	for _, activeScope := range []string{"list", "transcript", "activity", "detail"} {
+	for _, activeScope := range []string{"list", "transcript", "activity", "detail", "search", "project"} {
 		owners := map[string]string{}
 		for _, binding := range bindings {
-			if binding.Scope != "global" && binding.Scope != activeScope {
+			includeGlobal := activeScope != "search" && activeScope != "project"
+			if binding.Scope != activeScope && (!includeGlobal || binding.Scope != "global") {
 				continue
 			}
 			for _, raw := range binding.Keys {
@@ -185,6 +164,101 @@ func ValidateKeys(keys KeyConfig) error {
 		return errors.New(strings.Join(problems, "\n"))
 	}
 	return nil
+}
+
+func ResolveInheritedKeyConflicts(keys *KeyConfig, raw map[string]any) {
+	explicit := explicitKeyBindings(raw)
+	if len(explicit) == 0 {
+		return
+	}
+	var claims []Binding
+	for _, binding := range keys.Bindings() {
+		if explicit[binding.Scope+"."+binding.Action] {
+			claims = append(claims, binding)
+		}
+	}
+	visitBindingFields(keys, func(scope, action string, inherited *[]string) {
+		if explicit[scope+"."+action] {
+			return
+		}
+		filtered := (*inherited)[:0]
+		for _, candidate := range *inherited {
+			canonical, err := CanonicalKey(candidate)
+			if err != nil || !claimedByExplicit(claims, scope, canonical) {
+				filtered = append(filtered, candidate)
+			}
+		}
+		*inherited = filtered
+	})
+}
+
+func explicitKeyBindings(raw map[string]any) map[string]bool {
+	explicit := map[string]bool{}
+	keys, ok := raw["keys"].(map[string]any)
+	if !ok {
+		return explicit
+	}
+	for scope, value := range keys {
+		actions, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		for action := range actions {
+			explicit[scope+"."+action] = true
+		}
+	}
+	return explicit
+}
+
+func claimedByExplicit(claims []Binding, inheritedScope, canonical string) bool {
+	for _, claim := range claims {
+		if !scopesOverlap(claim.Scope, inheritedScope) {
+			continue
+		}
+		for _, raw := range claim.Keys {
+			key, err := CanonicalKey(raw)
+			if err == nil && key == canonical {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func scopesOverlap(a, b string) bool {
+	if a == b {
+		return true
+	}
+	if a != "global" && b != "global" {
+		return false
+	}
+	other := a
+	if other == "global" {
+		other = b
+	}
+	return other != "search" && other != "project"
+}
+
+func visitBindingFields(keys *KeyConfig, visit func(scope, action string, keys *[]string)) {
+	root := reflect.ValueOf(keys).Elem()
+	rootType := root.Type()
+	for i := 0; i < root.NumField(); i++ {
+		scope := rootType.Field(i).Tag.Get("toml")
+		nested := root.Field(i)
+		if nested.Kind() != reflect.Struct {
+			continue
+		}
+		nestedType := nested.Type()
+		for j := 0; j < nested.NumField(); j++ {
+			field := nested.Field(j)
+			if field.Kind() != reflect.Slice || field.Type().Elem().Kind() != reflect.String {
+				continue
+			}
+			action := nestedType.Field(j).Tag.Get("toml")
+			binding := field.Addr().Interface().(*[]string)
+			visit(scope, action, binding)
+		}
+	}
 }
 
 func CanonicalKey(value string) (string, error) {

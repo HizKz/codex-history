@@ -9,15 +9,31 @@
 ## 主な機能
 
 - 会話一覧とターン単位トランスクリプトの2ペイン表示（狭い端末では1ペイン）
-- ユーザー・Codexメッセージの全文検索
+- ユーザー・Codexメッセージの関連度順全文検索と一致箇所の表示
 - 会話を主役にし、plan、reasoning、コマンド、ファイル変更、MCP呼び出しなどを
   ターンごとのActivityにまとめて表示
 - `codex resume <thread-id>` による会話の再開
 - 厳格かつバージョン管理されたTOML設定
-- キーバインド、色、履歴ソース、アーカイブ表示などのカスタマイズ
+- キーバインド、色、プロジェクト、履歴ソース、アーカイブ表示などのカスタマイズ
 - macOS / Linux、Homebrew / Nixでの配布を想定した構成
 
 ## インストール
+
+Codex CLIが `codex` として利用できる必要があります。別の実行ファイルは
+`--codex-bin` または `codex.binary` で指定できます。
+
+### Homebrew
+
+```sh
+brew install --cask HizKz/tap/codex-history
+```
+
+### リリースアーカイブ
+
+[GitHub Releases](https://github.com/HizKz/codex-history/releases) から対象OSの
+アーカイブを取得し、`checksums.txt` で検証してからPATH上へ配置してください。
+
+### ソースから
 
 Go 1.25以降と、動作する `codex` コマンドが必要です。
 
@@ -25,8 +41,7 @@ Go 1.25以降と、動作する `codex` コマンドが必要です。
 go install github.com/HizKz/codex-history/cmd/codex-history@latest
 ```
 
-Homebrew tap、nixpkgs、ビルド済みバイナリは最初のタグ付きリリース後に
-追加する予定です。
+nixpkgsへの収録は今後対応予定です。
 
 ## 使い方
 
@@ -47,6 +62,7 @@ codex-history config check
 | `[` / `]` | 前後のターンへ移動 |
 | `tab` | ペイン切り替え |
 | `/` | 全文検索 |
+| `p` | 作業ディレクトリ単位のプロジェクト絞り込み |
 | `enter` | 選択した会話を再開 |
 | `space` | 選択ターンのActivityを開く |
 | `esc` | イベント詳細・Activityから戻る |
@@ -73,12 +89,15 @@ codex-history config init
 `CODEX_HISTORY_CONFIG` または `--config` で別のファイルを指定できます。
 未知のフィールド、不正な色や値、同時に有効になるキーバインドの競合は起動前に
 エラーになります。未指定項目は埋め込み初期値を継承します。キーマップを完全に
-作り直す場合は `keys.use_defaults = false` を指定してください。
+作り直す場合は `keys.use_defaults = false` を指定してください。明示した
+キーバインドは継承された初期値より優先され、明示設定同士の競合は拒否されます。
 
 全設定は [examples/config.toml](examples/config.toml) を参照してください。
 
 SQLiteインデックスには、コマンド出力、MCPの引数・結果などの展開式ツール詳細を
-含めません。永続キャッシュを使いたくない場合は `--no-cache` を指定できます。
+含めません。3文字以上の検索ではtrigramインデックスを使って関連度と一致箇所を
+表示し、1〜2文字ではリテラルな部分一致を維持します。永続キャッシュを
+使いたくない場合は `--no-cache` を指定できます。
 
 ## 開発
 

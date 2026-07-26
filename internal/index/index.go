@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/HizKz/codex-history/internal/appserver"
 	"github.com/HizKz/codex-history/internal/history"
@@ -27,6 +28,22 @@ type Result struct {
 	Source    string
 	UpdatedAt int64
 	Archived  bool
+	Match     MatchField
+	Snippet   []SnippetSegment
+}
+
+type MatchField string
+
+const (
+	MatchTitle   MatchField = "title"
+	MatchPreview MatchField = "preview"
+	MatchCWD     MatchField = "cwd"
+	MatchBody    MatchField = "message"
+)
+
+type SnippetSegment struct {
+	Text    string
+	Matched bool
 }
 
 func DefaultPath() (string, error) {
@@ -146,13 +163,71 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]Result, 
 	if query == "" {
 		return nil, nil
 	}
+	if utf8.RuneCountInString(query) < 3 {
+		return s.searchLike(ctx, query, limit)
+	}
+	return s.searchFTS(ctx, query, limit)
+}
+
+const (
+	highlightStart = "\uE000"
+	highlightEnd   = "\uE001"
+)
+
+func (s *Store) searchFTS(ctx context.Context, query string, limit int) ([]Result, error) {
+	ftsQuery := `"` + strings.ReplaceAll(query, `"`, `""`) + `"`
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.id, t.title, t.preview, t.cwd, t.source, t.updated_at, t.archived,
+		       highlight(thread_fts, 1, ?, ?),
+		       highlight(thread_fts, 2, ?, ?),
+		       highlight(thread_fts, 3, ?, ?),
+		       snippet(thread_fts, 4, ?, ?, ' … ', 32)
+		FROM thread_fts JOIN threads t ON t.id = thread_fts.thread_id
+		WHERE thread_fts MATCH ?
+		ORDER BY bm25(thread_fts, 0.0, 8.0, 4.0, 2.0, 1.0), t.updated_at DESC
+		LIMIT ?`,
+		highlightStart, highlightEnd,
+		highlightStart, highlightEnd,
+		highlightStart, highlightEnd,
+		highlightStart, highlightEnd,
+		ftsQuery, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []Result
+	for rows.Next() {
+		var result Result
+		var title, preview, cwd, body string
+		if err := rows.Scan(
+			&result.ID, &result.Title, &result.Preview, &result.CWD, &result.Source,
+			&result.UpdatedAt, &result.Archived, &title, &preview, &cwd, &body,
+		); err != nil {
+			return nil, err
+		}
+		result.Match, result.Snippet = highlightedSnippet(title, preview, cwd, body)
+		results = append(results, result)
+	}
+	return results, rows.Err()
+}
+
+func (s *Store) searchLike(ctx context.Context, query string, limit int) ([]Result, error) {
 	pattern := "%" + escapeLike(query) + "%"
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT t.id, t.title, t.preview, t.cwd, t.source, t.updated_at, t.archived
+		SELECT t.id, t.title, t.preview, t.cwd, t.source, t.updated_at, t.archived, f.body
 		FROM thread_fts f JOIN threads t ON t.id = f.thread_id
 		WHERE f.title LIKE ? ESCAPE '\' OR f.preview LIKE ? ESCAPE '\'
 		   OR f.cwd LIKE ? ESCAPE '\' OR f.body LIKE ? ESCAPE '\'
-		ORDER BY t.updated_at DESC LIMIT ?`, pattern, pattern, pattern, pattern, limit)
+		ORDER BY CASE
+			WHEN f.title LIKE ? ESCAPE '\' THEN 0
+			WHEN f.preview LIKE ? ESCAPE '\' THEN 1
+			WHEN f.cwd LIKE ? ESCAPE '\' THEN 2
+			ELSE 3
+		END, t.updated_at DESC
+		LIMIT ?`,
+		pattern, pattern, pattern, pattern,
+		pattern, pattern, pattern, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -160,12 +235,125 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]Result, 
 	var results []Result
 	for rows.Next() {
 		var result Result
-		if err := rows.Scan(&result.ID, &result.Title, &result.Preview, &result.CWD, &result.Source, &result.UpdatedAt, &result.Archived); err != nil {
+		var body string
+		if err := rows.Scan(
+			&result.ID, &result.Title, &result.Preview, &result.CWD, &result.Source,
+			&result.UpdatedAt, &result.Archived, &body,
+		); err != nil {
 			return nil, err
 		}
+		result.Match, result.Snippet = literalSnippet(query, result.Title, result.Preview, result.CWD, body)
 		results = append(results, result)
 	}
 	return results, rows.Err()
+}
+
+func highlightedSnippet(title, preview, cwd, body string) (MatchField, []SnippetSegment) {
+	for _, candidate := range []struct {
+		field MatchField
+		text  string
+	}{
+		{MatchTitle, title},
+		{MatchPreview, preview},
+		{MatchCWD, cwd},
+		{MatchBody, body},
+	} {
+		segments, matched := parseHighlight(candidate.text)
+		if matched {
+			return candidate.field, segments
+		}
+	}
+	return "", nil
+}
+
+func parseHighlight(value string) ([]SnippetSegment, bool) {
+	var segments []SnippetSegment
+	matched := false
+	for value != "" {
+		start := strings.Index(value, highlightStart)
+		if start < 0 {
+			segments = appendSegment(segments, value, false)
+			break
+		}
+		segments = appendSegment(segments, value[:start], false)
+		value = value[start+len(highlightStart):]
+		end := strings.Index(value, highlightEnd)
+		if end < 0 {
+			segments = appendSegment(segments, value, false)
+			break
+		}
+		segments = appendSegment(segments, value[:end], true)
+		matched = true
+		value = value[end+len(highlightEnd):]
+	}
+	return segments, matched
+}
+
+func literalSnippet(query, title, preview, cwd, body string) (MatchField, []SnippetSegment) {
+	for _, candidate := range []struct {
+		field MatchField
+		text  string
+	}{
+		{MatchTitle, title},
+		{MatchPreview, preview},
+		{MatchCWD, cwd},
+		{MatchBody, body},
+	} {
+		if segments, ok := literalSegments(candidate.text, query); ok {
+			return candidate.field, segments
+		}
+	}
+	return "", nil
+}
+
+func literalSegments(value, query string) ([]SnippetSegment, bool) {
+	start := strings.Index(value, query)
+	if start < 0 && isASCII(query) {
+		start = strings.Index(strings.ToLower(value), strings.ToLower(query))
+	}
+	if start < 0 {
+		return nil, false
+	}
+	end := start + len(query)
+	const contextRunes = 40
+	prefix := []rune(value[:start])
+	match := value[start:end]
+	suffix := []rune(value[end:])
+	left := ""
+	if len(prefix) > contextRunes {
+		left = "…"
+		prefix = prefix[len(prefix)-contextRunes:]
+	}
+	right := ""
+	if len(suffix) > contextRunes {
+		right = "…"
+		suffix = suffix[:contextRunes]
+	}
+	return []SnippetSegment{
+		{Text: left + string(prefix)},
+		{Text: match, Matched: true},
+		{Text: string(suffix) + right},
+	}, true
+}
+
+func appendSegment(segments []SnippetSegment, text string, matched bool) []SnippetSegment {
+	if text == "" {
+		return segments
+	}
+	if len(segments) > 0 && segments[len(segments)-1].Matched == matched {
+		segments[len(segments)-1].Text += text
+		return segments
+	}
+	return append(segments, SnippetSegment{Text: text, Matched: matched})
+}
+
+func isASCII(value string) bool {
+	for _, r := range value {
+		if r > 127 {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) Clear(ctx context.Context) error {

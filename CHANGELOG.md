@@ -5,6 +5,18 @@ is based on Keep a Changelog, and the project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-26
+
+### Added
+
+- Relevance-ranked full-text results with highlighted match snippets
+- Non-destructive project filtering by conversation working directory
+
+### Changed
+
+- Preserved literal substring behavior for short and syntax-like search terms
+- Made explicit key bindings take precedence over colliding inherited defaults
+
 ## [0.2.0] - 2026-07-23
 
 ### Added
@@ -28,6 +40,7 @@ is based on Keep a Changelog, and the project follows Semantic Versioning.
 - Doctor and configuration management commands
 - GoReleaser, GitHub Actions, Homebrew tap, and Nix packaging foundations
 
-[Unreleased]: https://github.com/HizKz/codex-history/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/HizKz/codex-history/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/HizKz/codex-history/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/HizKz/codex-history/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HizKz/codex-history/releases/tag/v0.1.0

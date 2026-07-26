@@ -47,8 +47,10 @@ tool results, and raw expandable details.
 
 Uses a local SQLite database and an FTS5 trigram table. Thread metadata is
 upserted transactionally; changed `updated_at` values determine whether a full
-thread needs reindexing. Queries use escaped `LIKE` patterns so `%` and `_` are
-literal user input.
+thread needs reindexing. Queries of three or more Unicode characters use a
+quoted FTS phrase, weighted BM25 ranking, and segmented match snippets. Shorter
+queries use escaped `LIKE` patterns. Both paths treat query syntax, `%`, and `_`
+as literal user input.
 
 Persistent cache directories and files use user-only permissions where the OS
 supports them. `--no-cache` uses an in-memory database.
@@ -57,8 +59,9 @@ supports them. `--no-cache` uses an in-memory database.
 
 Starts from embedded defaults, overlays strict TOML, rejects unknown fields,
 and validates all values before the TUI starts. `keys.use_defaults = false`
-clears inherited bindings. Key conflicts are checked for each active pane;
-`ctrl+c` remains reserved.
+clears inherited bindings. Explicit bindings override colliding inherited
+defaults, while conflicts between explicit bindings are rejected in every
+active pane or modal scope. `ctrl+c` remains reserved.
 
 ### `internal/tui`
 
@@ -67,6 +70,9 @@ I/O. Wide terminals render conversation and transcript panes together. Compact
 terminals display the focused pane. Conversation entries use a two-line layout
 with emphasized titles and subdued working-directory, source, and timestamp
 metadata. The selected entry emphasizes both rows as a single block.
+During search, the second row displays the ranked result's matched field and
+snippet. A separate project picker filters both normal and searched lists by
+exact working directory without modifying Codex threads.
 The transcript preserves app-server turn boundaries, renders user and final
 assistant messages as the primary document, and groups intermediate messages
 and tool events into an Activity inspector.

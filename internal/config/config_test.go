@@ -13,7 +13,8 @@ func TestDecodeMergesDefaults(t *testing.T) {
 	if cfg.UI.ShowHelp {
 		t.Fatal("expected explicit show_help=false")
 	}
-	if cfg.Codex.Binary != "codex" || len(cfg.Keys.List.Down) == 0 || len(cfg.Keys.Activity.Open) == 0 || len(cfg.Keys.Detail.Close) == 0 {
+	if cfg.Codex.Binary != "codex" || len(cfg.Keys.List.Down) == 0 || len(cfg.Keys.Activity.Open) == 0 ||
+		len(cfg.Keys.Detail.Close) == 0 || len(cfg.Keys.Global.FilterProject) == 0 || len(cfg.Keys.Project.Accept) == 0 {
 		t.Fatal("expected unspecified values to retain defaults")
 	}
 }
@@ -60,5 +61,42 @@ func TestActivityKeyConflictsWithGlobalKeys(t *testing.T) {
 	cfg.Keys.Activity.Open = []string{"q"}
 	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "while activity is focused") {
 		t.Fatalf("expected activity-scope conflict, got %v", err)
+	}
+}
+
+func TestExplicitKeyOverridesAnInheritedDefault(t *testing.T) {
+	cfg, err := Decode(strings.NewReader(`
+config_version = 1
+[keys.list]
+first = ["p"]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Keys.Match("list", "first", "p") {
+		t.Fatal("expected the explicit list binding to be retained")
+	}
+	if cfg.Keys.Match("global", "filter_project", "p") {
+		t.Fatal("expected the conflicting inherited project binding to be removed")
+	}
+}
+
+func TestExplicitKeyConflictIsRejected(t *testing.T) {
+	_, err := Decode(strings.NewReader(`
+config_version = 1
+[keys.search]
+accept = ["enter"]
+cancel = ["enter"]
+`))
+	if err == nil || !strings.Contains(err.Error(), "while search is focused") {
+		t.Fatalf("expected an explicit search-scope conflict, got %v", err)
+	}
+}
+
+func TestProjectKeyConflictIsRejected(t *testing.T) {
+	cfg := Defaults()
+	cfg.Keys.Project.Accept = []string{"j"}
+	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "while project is focused") {
+		t.Fatalf("expected a project-scope conflict, got %v", err)
 	}
 }

@@ -69,6 +69,12 @@ type model struct {
 	detailOffset     int
 	query            string
 	searching        bool
+	searchGeneration uint64
+	searchResults    []index.Result
+	searchMatches    map[string]index.Result
+	projectOpen      bool
+	projectCursor    int
+	projectCWD       string
 	focus            focus
 	width            int
 	height           int
@@ -100,9 +106,15 @@ type transcriptMsg struct {
 }
 
 type searchMsg struct {
-	query string
-	ids   []string
-	err   error
+	query      string
+	generation uint64
+	results    []index.Result
+	err        error
+}
+
+type searchDelayMsg struct {
+	query      string
+	generation uint64
 }
 
 type indexMsg struct {
@@ -275,14 +287,19 @@ func (m model) indexCmd(clear bool) tea.Cmd {
 
 func (m model) searchCmd() tea.Cmd {
 	query := m.query
+	generation := m.searchGeneration
 	return func() tea.Msg {
 		results, err := m.store.Search(m.ctx, query, 500)
-		ids := make([]string, 0, len(results))
-		for _, result := range results {
-			ids = append(ids, result.ID)
-		}
-		return searchMsg{query: query, ids: ids, err: err}
+		return searchMsg{query: query, generation: generation, results: results, err: err}
 	}
+}
+
+func (m model) delayedSearchCmd() tea.Cmd {
+	query := m.query
+	generation := m.searchGeneration
+	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
+		return searchDelayMsg{query: query, generation: generation}
+	})
 }
 
 func (m model) reloadConfigCmd() tea.Cmd {
@@ -308,7 +325,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err, m.status = msg.err.Error(), "Unable to connect"
 			return m, nil
 		}
-		m.client, m.threads, m.visible = msg.client, msg.threads, msg.threads
+		m.client, m.threads = msg.client, msg.threads
+		m.applyCurrentFilters()
 		m.status = fmt.Sprintf("%d conversations", len(m.threads))
 		m.clampSelection()
 		cmds := []tea.Cmd{m.loadSelectedCmd()}
@@ -323,8 +341,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err.Error()
 			return m, nil
 		}
-		m.threads, m.visible, m.query = msg.threads, msg.threads, ""
+		m.threads, m.query, m.searchResults, m.searchMatches = msg.threads, "", nil, nil
+		m.searchGeneration++
+		projectCleared := m.clearMissingProject()
+		m.applyCurrentFilters()
 		m.status = fmt.Sprintf("%d conversations", len(m.threads))
+		if projectCleared {
+			m.status = "Project filter cleared; " + m.status
+		}
 		m.clampSelection()
 		return m, m.loadSelectedCmd()
 	case transcriptMsg:
@@ -340,16 +364,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.store.Upsert(m.ctx, msg.transcript.Thread, msg.transcript)
 		}
 	case searchMsg:
-		if msg.query != m.query {
+		if msg.query != m.query || msg.generation != m.searchGeneration {
 			return m, nil
 		}
 		if msg.err != nil {
 			m.err = msg.err.Error()
 			return m, nil
 		}
-		m.applySearch(msg.ids)
+		m.searchResults = msg.results
+		m.applyCurrentFilters()
 		m.clampSelection()
 		return m, m.loadSelectedCmd()
+	case searchDelayMsg:
+		if msg.query != m.query || msg.generation != m.searchGeneration || msg.query == "" {
+			return m, nil
+		}
+		return m, m.searchCmd()
 	case indexMsg:
 		m.indexing = false
 		if msg.err != nil {
@@ -386,7 +416,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.PasteMsg:
 		if m.searching {
 			m.query += strings.ReplaceAll(msg.Content, "\n", " ")
-			return m, m.searchCmd()
+			m.searchGeneration++
+			return m, m.delayedSearchCmd()
 		}
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -399,17 +430,24 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key == "ctrl+c" {
 		return m, tea.Quit
 	}
+	if m.projectOpen {
+		return m.handleProjectKey(key)
+	}
 	if m.searching {
 		switch {
 		case m.cfg.Keys.Match("search", "accept", key):
 			m.searching, m.status = false, fmt.Sprintf("%d matches", len(m.visible))
 			return m, nil
 		case m.cfg.Keys.Match("search", "cancel", key):
-			m.searching, m.query, m.visible = false, "", m.threads
+			m.searching, m.query, m.searchResults, m.searchMatches = false, "", nil, nil
+			m.searchGeneration++
+			m.applyCurrentFilters()
 			m.clampSelection()
 			return m, m.loadSelectedCmd()
 		case m.cfg.Keys.Match("search", "clear", key):
-			m.query, m.visible = "", m.threads
+			m.query, m.searchResults, m.searchMatches = "", nil, nil
+			m.searchGeneration++
+			m.applyCurrentFilters()
 			m.clampSelection()
 			return m, m.loadSelectedCmd()
 		case key == "backspace":
@@ -418,15 +456,19 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.query = m.query[:len(m.query)-size]
 			}
 			if m.query == "" {
-				m.visible = m.threads
+				m.searchResults, m.searchMatches = nil, nil
+				m.searchGeneration++
+				m.applyCurrentFilters()
 				m.clampSelection()
 				return m, m.loadSelectedCmd()
 			}
-			return m, m.searchCmd()
+			m.searchGeneration++
+			return m, m.delayedSearchCmd()
 		default:
 			if text := msg.Key().Text; text != "" {
 				m.query += text
-				return m, m.searchCmd()
+				m.searchGeneration++
+				return m, m.delayedSearchCmd()
 			}
 		}
 		return m, nil
@@ -439,6 +481,10 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.showHelp {
+		return m, nil
+	}
+	if m.cfg.Keys.Match("global", "filter_project", key) {
+		m.openProjectPicker()
 		return m, nil
 	}
 	if m.focus == focusTranscript && m.transcriptView != transcriptConversation {
@@ -750,24 +796,39 @@ func resizedAnchorLine(lines []transcriptLine, anchor transcriptLine) int {
 	return 0
 }
 
-func (m *model) applySearch(indexedIDs []string) {
+func (m *model) applyCurrentFilters() {
+	if m.query == "" {
+		m.searchMatches = nil
+		m.visible = m.visibleForProject(m.threads)
+		return
+	}
+	m.applySearch(m.searchResults)
+}
+
+func (m *model) applySearch(results []index.Result) {
 	byID := make(map[string]appserver.Thread, len(m.threads))
 	for _, thread := range m.threads {
 		byID[thread.ID] = thread
 	}
 	seen := make(map[string]bool)
-	visible := make([]appserver.Thread, 0, len(indexedIDs))
-	for _, id := range indexedIDs {
-		if thread, ok := byID[id]; ok {
+	visible := make([]appserver.Thread, 0, len(results))
+	m.searchMatches = make(map[string]index.Result, len(results))
+	for _, result := range results {
+		if thread, ok := byID[result.ID]; ok && m.matchesProject(thread) {
 			visible = append(visible, thread)
-			seen[id] = true
+			seen[result.ID] = true
+			m.searchMatches[result.ID] = result
 		}
 	}
 	needle := strings.ToLower(strings.TrimSpace(m.query))
 	for _, thread := range m.threads {
+		if !m.matchesProject(thread) {
+			continue
+		}
 		metadata := history.Title(thread) + "\n" + thread.Preview + "\n" + thread.CWD
 		if !seen[thread.ID] && strings.Contains(strings.ToLower(metadata), needle) {
 			visible = append(visible, thread)
+			m.searchMatches[thread.ID] = metadataSearchResult(thread, m.query)
 		}
 	}
 	m.visible = visible
@@ -780,6 +841,9 @@ func (m model) View() tea.View {
 }
 
 func (m model) render() string {
+	if m.projectOpen {
+		return m.renderProjectPicker()
+	}
 	if m.showHelp {
 		return m.renderHelp()
 	}
@@ -813,9 +877,10 @@ func (m model) render() string {
 func (m model) renderHeader(width int) string {
 	title := m.accentStyle().Bold(true).Render("codex-history")
 	mode := fmt.Sprintf(
-		"sources %s  ·  archived %s",
+		"sources %s  ·  archived %s  ·  project %s",
 		map[bool]string{true: "all", false: "config"}[m.allSources],
 		map[bool]string{true: "on", false: "off"}[m.archived],
+		m.projectLabel(),
 	)
 	if m.indexing {
 		mode += "  ·  indexing…"
@@ -866,8 +931,14 @@ func (m model) renderList(width, height int) string {
 		if i == m.selected {
 			metadataMarker = "│ "
 		}
-		metadata := metadataMarker + truncate(m.conversationListMetadata(thread), max(1, innerWidth-2))
-		lines = append(lines, titleStyle.Render(title), metadataStyle.Render(metadata))
+		if result, ok := m.searchMatches[thread.ID]; ok && m.query != "" {
+			metadata := m.conversationListMetadataStyle(selected).Render(metadataMarker) +
+				m.renderSearchContext(result, max(1, innerWidth-2), selected)
+			lines = append(lines, titleStyle.Render(title), lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(metadata))
+		} else {
+			metadata := metadataMarker + truncate(m.conversationListMetadata(thread), max(1, innerWidth-2))
+			lines = append(lines, titleStyle.Render(title), metadataStyle.Render(metadata))
+		}
 	}
 	for len(lines) < rows {
 		lines = append(lines, "")
@@ -1109,6 +1180,7 @@ func (m model) footerText() string {
 			m.keyHint("list", "resume", "resume"),
 			m.keyHint("global", "focus_next", "transcript"),
 			m.keyHint("global", "search", "search"),
+			m.keyHint("global", "filter_project", "project"),
 			m.keyHint("global", "help", "help"),
 		)
 	} else {
@@ -1179,6 +1251,7 @@ func bindingLabel(action string) string {
 		"reload_config":   "Reload config",
 		"toggle_sources":  "Toggle sources",
 		"toggle_archived": "Toggle archived",
+		"filter_project":  "Filter project",
 		"page_up":         "Page up",
 		"page_down":       "Page down",
 		"previous_turn":   "Previous turn",
