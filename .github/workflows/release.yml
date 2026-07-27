@@ -19,7 +19,7 @@ jobs:
       prerelease: ${{ steps.release.outputs.prerelease }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Validate tag, branch, and changelog
@@ -75,7 +75,7 @@ jobs:
             echo "prerelease=false" >> "${GITHUB_OUTPUT}"
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.25.12"
           cache: true
@@ -95,7 +95,7 @@ jobs:
         run: go test -race ./...
       - name: Vet
         run: go vet ./...
-      - uses: dominikh/staticcheck-action@e986ce0bb60df51c6c9f5ccbf853d1b5bd1ca14c # v1
+      - uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1
         with:
           version: "2025.1.1"
           install-go: false
@@ -119,10 +119,10 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.25.12"
           cache: true
@@ -150,7 +150,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
       - name: Attest release artifacts
-        uses: actions/attest@36051bcae73b7c2a8a6945a48cbf80953c6baa35 # v4
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
         with:
           subject-path: |
             dist/*.tar.gz
