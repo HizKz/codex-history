@@ -707,7 +707,7 @@ func (m model) transcriptPanelWidth() int {
 }
 
 func (m model) transcriptContentWidth() int {
-	return max(4, m.transcriptPanelWidth()-4)
+	return max(4, m.transcriptPanelWidth()-6)
 }
 
 func (m model) transcriptRows() int {
@@ -783,6 +783,18 @@ func nextTurnLine(lines []transcriptLine, cursor int) int {
 }
 
 func resizedAnchorLine(lines []transcriptLine, anchor transcriptLine) int {
+	if anchor.Anchor != "" {
+		for i, line := range lines {
+			if line.Anchor == anchor.Anchor && line.Kind == anchor.Kind {
+				return i
+			}
+		}
+		for i, line := range lines {
+			if line.Anchor == anchor.Anchor {
+				return i
+			}
+		}
+	}
 	for i, line := range lines {
 		if line.Turn == anchor.Turn && line.Activity == anchor.Activity && line.Role == anchor.Role {
 			return i
@@ -904,6 +916,8 @@ func (m model) renderList(width, height int) string {
 	}
 	title := panelTitle(name, active, fmt.Sprintf("%d", len(m.visible)))
 	innerWidth := max(10, width-2)
+	rowWidth := max(4, innerWidth-2)
+	contentWidth := max(1, rowWidth-2)
 	innerHeight := max(2, height-2)
 	rows := max(1, innerHeight-1)
 	pageSize := conversationListPageSize(rows)
@@ -923,20 +937,20 @@ func (m model) renderList(width, height int) string {
 		if thread.Archived {
 			itemTitle = "[A] " + itemTitle
 		}
-		title := marker + truncate(itemTitle, max(1, innerWidth-2))
+		title := marker + truncate(itemTitle, contentWidth)
 		metadataMarker := "  "
 		selected := i == m.selected
-		titleStyle := m.conversationListTitleStyle(selected).Width(innerWidth).MaxWidth(innerWidth)
-		metadataStyle := m.conversationListMetadataStyle(selected).Width(innerWidth).MaxWidth(innerWidth)
+		titleStyle := m.conversationListTitleStyle(selected).Width(rowWidth).MaxWidth(rowWidth)
+		metadataStyle := m.conversationListMetadataStyle(selected).Width(rowWidth).MaxWidth(rowWidth)
 		if i == m.selected {
 			metadataMarker = "│ "
 		}
 		if result, ok := m.searchMatches[thread.ID]; ok && m.query != "" {
 			metadata := m.conversationListMetadataStyle(selected).Render(metadataMarker) +
-				m.renderSearchContext(result, max(1, innerWidth-2), selected)
-			lines = append(lines, titleStyle.Render(title), lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(metadata))
+				m.renderSearchContext(result, contentWidth, selected)
+			lines = append(lines, titleStyle.Render(title), lipgloss.NewStyle().Width(rowWidth).MaxWidth(rowWidth).Render(metadata))
 		} else {
-			metadata := metadataMarker + truncate(m.conversationListMetadata(thread), max(1, innerWidth-2))
+			metadata := metadataMarker + truncate(m.conversationListMetadata(thread), contentWidth)
 			lines = append(lines, titleStyle.Render(title), metadataStyle.Render(metadata))
 		}
 	}
@@ -1003,7 +1017,8 @@ func (m model) renderTranscript(width, height int) string {
 }
 
 func (m model) renderConversationPanel(active bool, innerWidth, innerHeight, rows int) string {
-	contentWidth := max(4, innerWidth-2)
+	rowWidth := max(4, innerWidth-2)
+	contentWidth := max(4, rowWidth-2)
 	logical := buildTranscriptLines(m.transcript, contentWidth, m.cfg.UI.ToolDetails == "expanded")
 	cursor := 0
 	if len(logical) > 0 {
@@ -1018,19 +1033,8 @@ func (m model) renderConversationPanel(active bool, innerWidth, innerHeight, row
 		if i == cursor {
 			gutter = m.accentStyle().Bold(true).Render("▌ ")
 		}
-		style := lipgloss.NewStyle()
-		switch line.Role {
-		case lineMuted:
-			style = m.mutedStyle()
-		case lineUser:
-			style = applyForeground(style, m.semanticColor("user", m.cfg.UI.Colors.User)).Bold(true)
-		case lineAssistant:
-			style = applyForeground(style, m.semanticColor("assistant", m.cfg.UI.Colors.Assistant)).Bold(true)
-		case lineActivity:
-			style = m.accentStyle().Bold(true)
-		}
-		text := truncate(line.Text, contentWidth)
-		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(gutter+style.Render(text)))
+		row := m.renderTranscriptLine(line, contentWidth)
+		lines = append(lines, lipgloss.NewStyle().Width(rowWidth).MaxWidth(rowWidth).Render(gutter+row))
 	}
 	for len(lines) < rows {
 		lines = append(lines, "")
@@ -1047,7 +1051,87 @@ func (m model) renderConversationPanel(active bool, innerWidth, innerHeight, row
 	return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + strings.Join(lines, "\n"))
 }
 
+func (m model) renderTranscriptLine(line transcriptLine, width int) string {
+	width = max(1, width)
+	var rendered string
+	switch line.Kind {
+	case lineBlank:
+		return ""
+	case lineTurnDivider:
+		label := truncate(line.Text, max(1, width-2))
+		remaining := max(0, width-lipgloss.Width(label)-2)
+		left := remaining / 2
+		right := remaining - left
+		rendered = m.mutedStyle().Render(
+			strings.Repeat("─", left) + " " + label + " " + strings.Repeat("─", right),
+		)
+	case lineBubbleTop, lineBubbleBody, lineBubbleBottom:
+		rendered = m.renderMessageBubbleLine(line, width)
+	default:
+		style := lipgloss.NewStyle()
+		switch line.Role {
+		case lineMuted:
+			style = m.mutedStyle()
+		case lineUser:
+			style = applyForeground(style, m.semanticColor("user", m.cfg.UI.Colors.User)).Bold(true)
+		case lineAssistant:
+			style = applyForeground(style, m.semanticColor("assistant", m.cfg.UI.Colors.Assistant)).Bold(true)
+		case lineActivity:
+			style = m.accentStyle().Bold(true)
+		}
+		rendered = style.Render(truncate(line.Text, width))
+	}
+
+	renderedWidth := lipgloss.Width(rendered)
+	switch line.Alignment {
+	case alignCenter:
+		return strings.Repeat(" ", max(0, (width-renderedWidth)/2)) + rendered
+	case alignRight:
+		return strings.Repeat(" ", max(0, width-renderedWidth)) + rendered
+	default:
+		return rendered
+	}
+}
+
+func (m model) renderMessageBubbleLine(line transcriptLine, availableWidth int) string {
+	bubbleWidth := min(max(4, line.BlockWidth), availableWidth)
+	borderStyle := lipgloss.NewStyle()
+	switch line.Role {
+	case lineUser:
+		borderStyle = applyForeground(borderStyle, m.semanticColor("user", m.cfg.UI.Colors.User)).Bold(true)
+	case lineAssistant:
+		borderStyle = applyForeground(borderStyle, m.semanticColor("assistant", m.cfg.UI.Colors.Assistant)).Bold(true)
+	}
+
+	switch line.Kind {
+	case lineBubbleTop:
+		edgeWidth := max(2, bubbleWidth-2)
+		edge := strings.Repeat("─", edgeWidth)
+		if edgeWidth > 2 {
+			label := " " + truncate(line.Text, edgeWidth-2) + " "
+			labelWidth := lipgloss.Width(label)
+			fill := strings.Repeat("─", max(0, edgeWidth-labelWidth))
+			edge = label + fill
+			if line.Alignment == alignRight {
+				edge = fill + label
+			}
+		}
+		return borderStyle.Render("╭" + edge + "╮")
+	case lineBubbleBottom:
+		return borderStyle.Render("╰" + strings.Repeat("─", max(0, bubbleWidth-2)) + "╯")
+	default:
+		textWidth := max(0, bubbleWidth-4)
+		text := line.Text
+		if lipgloss.Width(text) > textWidth {
+			text, _ = splitDisplayWidth(text, textWidth)
+		}
+		body := lipgloss.NewStyle().Width(textWidth).MaxWidth(textWidth).Render(text)
+		return borderStyle.Render("│") + " " + body + " " + borderStyle.Render("│")
+	}
+}
+
 func (m model) renderActivityPanel(active bool, innerWidth, innerHeight, rows int) string {
+	rowWidth := max(4, innerWidth-2)
 	items := m.currentActivity()
 	cursor := 0
 	if len(items) > 0 {
@@ -1063,8 +1147,8 @@ func (m model) renderActivityPanel(active bool, innerWidth, innerHeight, rows in
 			gutter = "› "
 			style = m.accentStyle().Bold(true)
 		}
-		text := truncate(activityEventLabel(i, items[i]), max(4, innerWidth-2))
-		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(gutter+style.Render(text)))
+		text := truncate(activityEventLabel(i, items[i]), max(4, rowWidth-2))
+		lines = append(lines, lipgloss.NewStyle().Width(rowWidth).MaxWidth(rowWidth).Render(gutter+style.Render(text)))
 	}
 	if len(items) == 0 {
 		lines = append(lines, m.mutedStyle().Render("No activity"))
@@ -1081,13 +1165,14 @@ func (m model) renderActivityPanel(active bool, innerWidth, innerHeight, rows in
 }
 
 func (m model) renderDetailPanel(active bool, innerWidth, innerHeight, rows int) string {
+	rowWidth := max(4, innerWidth-2)
 	items := m.currentActivity()
 	if len(items) == 0 {
 		title := panelTitle("Detail", active, "")
 		return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + m.mutedStyle().Render("No details"))
 	}
 	itemIndex := min(max(m.activityCursor, 0), len(items)-1)
-	logical := detailLines(items[itemIndex], max(4, innerWidth-2))
+	logical := detailLines(items[itemIndex], max(4, rowWidth-2))
 	cursor := min(max(m.detailCursor, 0), max(0, len(logical)-1))
 	start := visibleStart(m.detailOffset, cursor, rows, len(logical))
 	end := min(len(logical), start+rows)
@@ -1097,7 +1182,7 @@ func (m model) renderDetailPanel(active bool, innerWidth, innerHeight, rows int)
 		if i == cursor {
 			gutter = m.accentStyle().Bold(true).Render("▌ ")
 		}
-		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).MaxWidth(innerWidth).Render(gutter+logical[i]))
+		lines = append(lines, lipgloss.NewStyle().Width(rowWidth).MaxWidth(rowWidth).Render(gutter+logical[i]))
 	}
 	for len(lines) < rows {
 		lines = append(lines, "")
@@ -1108,9 +1193,9 @@ func (m model) renderDetailPanel(active bool, innerWidth, innerHeight, rows int)
 }
 
 func panelTitle(name string, active bool, extra string) string {
-	prefix := " "
+	prefix := "  "
 	if active {
-		prefix = " ▶ "
+		prefix = "▶ "
 	}
 	if extra != "" {
 		return fmt.Sprintf("%s%s · %s ", prefix, name, extra)

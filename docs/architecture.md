@@ -76,13 +76,17 @@ exact working directory without modifying Codex threads.
 The transcript preserves app-server turn boundaries, renders user and final
 assistant messages as the primary document, and groups intermediate messages
 and tool events into an Activity inspector.
-Turn headings, messages, and Activity summaries are separated by blank lines so
-each conversation block remains visually distinct.
+Primary messages use chat-style outlined bubbles: Codex messages align left,
+user messages align right, and message text remains left-aligned within each
+bubble. Bubbles use at most three quarters of the transcript width. Turn
+headings and Activity summaries remain centered system rows, separated from
+message bubbles by blank lines.
 
 Transcript navigation uses wrapped logical lines with turn and Activity anchors.
 Activity opens an event list, and an event opens a separately scrollable detail
-view. Wrapping and truncation use terminal display width rather than rune count
-so Japanese and other full-width text remain safe.
+view. Message anchors preserve the current message when a resize changes
+wrapping. Wrapping, alignment, and truncation use terminal display width rather
+than rune count so Japanese and other full-width text remain safe.
 
 Resume modes are:
 

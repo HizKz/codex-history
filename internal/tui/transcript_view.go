@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/HizKz/codex-history/internal/history"
 )
 
@@ -25,9 +27,32 @@ const (
 	lineActivity
 )
 
+type transcriptLineKind int
+
+const (
+	lineText transcriptLineKind = iota
+	lineBlank
+	lineTurnDivider
+	lineBubbleTop
+	lineBubbleBody
+	lineBubbleBottom
+)
+
+type transcriptLineAlignment int
+
+const (
+	alignLeft transcriptLineAlignment = iota
+	alignCenter
+	alignRight
+)
+
 type transcriptLine struct {
 	Text       string
 	Role       transcriptLineRole
+	Kind       transcriptLineKind
+	Alignment  transcriptLineAlignment
+	BlockWidth int
+	Anchor     string
 	Turn       int
 	TurnStart  bool
 	Activity   bool
@@ -37,33 +62,71 @@ type transcriptLine struct {
 func buildTranscriptLines(transcript history.Transcript, width int, showActivityEvents bool) []transcriptLine {
 	width = max(4, width)
 	var lines []transcriptLine
+	spacingIndex := 0
 	appendLine := func(line transcriptLine) {
 		lines = append(lines, line)
 	}
 	appendSpacing := func(turn int) {
-		if len(lines) > 0 && lines[len(lines)-1].Text != "" {
-			appendLine(transcriptLine{Text: "", Role: lineMuted, Turn: turn})
+		if len(lines) > 0 && lines[len(lines)-1].Kind != lineBlank {
+			appendLine(transcriptLine{
+				Role:   lineMuted,
+				Kind:   lineBlank,
+				Anchor: fmt.Sprintf("turn:%d:spacing:%d", turn, spacingIndex),
+				Turn:   turn,
+			})
+			spacingIndex++
 		}
 	}
-	appendText := func(text string, role transcriptLineRole, turn int) {
+	appendText := func(text string, role transcriptLineRole, alignment transcriptLineAlignment, anchor string, turn int) {
 		wrapped := wrapLines(text, width)
 		if len(wrapped) == 0 {
 			wrapped = []string{""}
 		}
 		for _, line := range wrapped {
-			appendLine(transcriptLine{Text: line, Role: role, Turn: turn})
+			appendLine(transcriptLine{
+				Text: line, Role: role, Kind: lineText, Alignment: alignment,
+				Anchor: anchor, Turn: turn,
+			})
 		}
 	}
-	appendMessage := func(item history.Item, turn int) {
+	appendMessage := func(item history.Item, turn, itemIndex int) {
 		role := lineBody
+		alignment := alignLeft
 		if item.Role == "user" {
 			role = lineUser
+			alignment = alignRight
 		} else if item.Role == "assistant" {
 			role = lineAssistant
 		}
+		maxBubbleWidth := min(width, max(12, width*3/4))
+		maxTextWidth := max(1, maxBubbleWidth-4)
+		wrapped := wrapLines(item.Text, maxTextWidth)
+		if len(wrapped) == 0 {
+			wrapped = []string{""}
+		}
+		contentWidth := 0
+		for _, line := range wrapped {
+			contentWidth = max(contentWidth, displayWidth(line))
+		}
+		bubbleWidth := min(maxBubbleWidth, max(displayWidth(item.Title)+4, contentWidth+4))
+		bubbleWidth = max(4, bubbleWidth)
+		anchor := fmt.Sprintf("turn:%d:message:%d:%s", turn, itemIndex, item.ID)
+
 		appendSpacing(turn)
-		appendLine(transcriptLine{Text: strings.ToUpper(item.Title), Role: role, Turn: turn})
-		appendText(item.Text, lineBody, turn)
+		appendLine(transcriptLine{
+			Text: item.Title, Role: role, Kind: lineBubbleTop, Alignment: alignment,
+			BlockWidth: bubbleWidth, Anchor: anchor, Turn: turn,
+		})
+		for _, line := range wrapped {
+			appendLine(transcriptLine{
+				Text: line, Role: role, Kind: lineBubbleBody, Alignment: alignment,
+				BlockWidth: bubbleWidth, Anchor: anchor, Turn: turn,
+			})
+		}
+		appendLine(transcriptLine{
+			Role: role, Kind: lineBubbleBottom, Alignment: alignment,
+			BlockWidth: bubbleWidth, Anchor: anchor, Turn: turn,
+		})
 	}
 
 	for turnIndex, turn := range transcript.Turns {
@@ -73,12 +136,13 @@ func buildTranscriptLines(transcript history.Transcript, width int, showActivity
 			heading += " · " + turn.Status
 		}
 		appendLine(transcriptLine{
-			Text: heading, Role: lineMuted, Turn: turnIndex, TurnStart: true,
+			Text: heading, Role: lineMuted, Kind: lineTurnDivider, Alignment: alignCenter,
+			Anchor: fmt.Sprintf("turn:%d", turnIndex), Turn: turnIndex, TurnStart: true,
 		})
 
-		for _, item := range turn.Primary {
+		for itemIndex, item := range turn.Primary {
 			if item.Role == "user" {
-				appendMessage(item, turnIndex)
+				appendMessage(item, turnIndex, itemIndex)
 			}
 		}
 		if len(turn.Activity) > 0 {
@@ -86,27 +150,36 @@ func buildTranscriptLines(transcript history.Transcript, width int, showActivity
 			appendLine(transcriptLine{
 				Text:       activitySummary(turn.Activity),
 				Role:       lineActivity,
+				Kind:       lineText,
+				Alignment:  alignCenter,
+				Anchor:     fmt.Sprintf("turn:%d:activity", turnIndex),
 				Turn:       turnIndex,
 				Activity:   true,
 				Actionable: true,
 			})
 			if showActivityEvents {
 				for i, item := range turn.Activity {
-					appendLine(transcriptLine{
-						Text: "  " + activityEventLabel(i, item),
-						Role: lineMuted,
-						Turn: turnIndex,
-					})
+					appendText(
+						activityEventLabel(i, item),
+						lineMuted,
+						alignCenter,
+						fmt.Sprintf("turn:%d:activity:%d", turnIndex, i),
+						turnIndex,
+					)
 				}
 			}
 		}
-		for _, item := range turn.Primary {
+		for itemIndex, item := range turn.Primary {
 			if item.Role != "user" {
-				appendMessage(item, turnIndex)
+				appendMessage(item, turnIndex, itemIndex)
 			}
 		}
 	}
 	return lines
+}
+
+func displayWidth(value string) int {
+	return lipgloss.Width(value)
 }
 
 func activitySummary(items []history.Item) string {

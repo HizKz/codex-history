@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
   <title id="title">codex-history terminal interface</title>
-  <desc id="desc">Synthetic conversation list and transcript demonstrating the two-pane terminal interface.</desc>
+  <desc id="desc">Synthetic conversation list and chat-style transcript demonstrating the two-pane terminal interface.</desc>
   <rect width="1200" height="720" rx="18" fill="#111318"/>
   <rect x="1" y="1" width="1198" height="718" rx="17" fill="none" stroke="#343943" stroke-width="2"/>
   <circle cx="30" cy="30" r="7" fill="#ff5f57"/>
@@ -13,23 +13,31 @@
   <text x="34" y="111" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">Conversations</text>
   <text x="346" y="111" text-anchor="end" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">3</text>
   <rect x="26" y="132" width="340" height="77" rx="6" fill="#2b3140"/>
-  <text x="42" y="160" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">Improve terminal navigation</text>
-  <text x="42" y="187" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">sample-project · moments ago</text>
-  <text x="42" y="241" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Add local search</text>
-  <text x="42" y="268" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">demo-app · yesterday</text>
-  <text x="42" y="321" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Review configuration</text>
-  <text x="42" y="348" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">terminal-tool · 2 days ago</text>
+  <text x="34" y="160" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">Improve terminal navigation</text>
+  <text x="34" y="187" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">sample-project · moments ago</text>
+  <text x="34" y="241" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Add local search</text>
+  <text x="34" y="268" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">demo-app · yesterday</text>
+  <text x="34" y="321" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Review configuration</text>
+  <text x="34" y="348" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">terminal-tool · 2 days ago</text>
   <text x="414" y="111" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">Improve terminal navigation</text>
-  <text x="414" y="151" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">USER</text>
-  <text x="414" y="182" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">Make transcript scrolling work by visual line,</text>
-  <text x="414" y="209" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">including narrow terminals and full-width text.</text>
-  <text x="414" y="263" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">CODEX</text>
-  <text x="414" y="294" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">Implemented display-width-aware wrapping and</text>
-  <text x="414" y="321" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">covered compact and wide layouts with tests.</text>
-  <rect x="414" y="359" width="738" height="49" rx="6" fill="#202531"/>
-  <text x="434" y="390" fill="#c6a0f6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Activity · 4 events</text>
-  <text x="414" y="466" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">USER</text>
-  <text x="414" y="497" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">Great — keep conversation data local.</text>
+  <line x1="420" y1="146" x2="708" y2="146" stroke="#737b8c"/>
+  <text x="788" y="151" text-anchor="middle" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">TURN 1</text>
+  <line x1="868" y1="146" x2="1154" y2="146" stroke="#737b8c"/>
+  <rect x="618" y="172" width="536" height="98" rx="10" fill="none" stroke="#a6da95" stroke-width="2"/>
+  <text x="1130" y="194" text-anchor="end" fill="#a6da95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">You</text>
+  <text x="638" y="224" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Make transcript scrolling work by visual line,</text>
+  <text x="638" y="250" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">including narrow terminals and full-width text.</text>
+  <text x="788" y="310" text-anchor="middle" fill="#c6a0f6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">▶ Activity · 4 events</text>
+  <rect x="414" y="342" width="548" height="98" rx="10" fill="none" stroke="#8bd5ca" stroke-width="2"/>
+  <text x="438" y="364" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">Codex</text>
+  <text x="434" y="394" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Implemented display-width-aware wrapping and</text>
+  <text x="434" y="420" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">covered compact and wide layouts with tests.</text>
+  <line x1="420" y1="480" x2="708" y2="480" stroke="#737b8c"/>
+  <text x="788" y="485" text-anchor="middle" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">TURN 2</text>
+  <line x1="868" y1="480" x2="1154" y2="480" stroke="#737b8c"/>
+  <rect x="746" y="506" width="408" height="72" rx="10" fill="none" stroke="#a6da95" stroke-width="2"/>
+  <text x="1130" y="528" text-anchor="end" fill="#a6da95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">You</text>
+  <text x="766" y="558" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Great — keep conversation data local.</text>
   <line x1="0" y1="666" x2="1200" y2="666" stroke="#343943" stroke-width="2"/>
   <text x="24" y="699" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">j/k move  / search  p project  enter resume  ? help</text>
   <text x="1176" y="699" text-anchor="end" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">local only</text>

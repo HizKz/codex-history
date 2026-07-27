@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/HizKz/codex-history/internal/appserver"
 	"github.com/HizKz/codex-history/internal/config"
@@ -58,6 +59,74 @@ func TestRenderListUsesTwoLineConversationEntries(t *testing.T) {
 			t.Fatalf("conversation list missing %q:\n%s", want, rendered)
 		}
 	}
+}
+
+func TestRenderListKeepsContentLeftAlignedWithinMarkerRail(t *testing.T) {
+	m := transcriptTestModel()
+	m.focus = focusList
+	m.cfg.UI.ShowTimestamps = false
+	m.visible = []appserver.Thread{
+		{ID: "thread-1", Preview: "Parser investigation", CWD: "/work/config-parser", Source: "cli"},
+		{ID: "thread-2", Preview: "Selected conversation", CWD: "/work/selected-project", Source: "vscode"},
+	}
+	m.selected = 1
+
+	rendered := stripSGR(m.renderList(48, 12))
+	for _, target := range []string{"Parser investigation", "config-parser", "Selected conversation", "selected-project"} {
+		found := false
+		for _, line := range strings.Split(rendered, "\n") {
+			index := strings.Index(line, target)
+			if index < 0 {
+				continue
+			}
+			found = true
+			if column := lipgloss.Width(line[:index]); column != 3 {
+				t.Fatalf("%q starts at column %d, want 3:\n%s", target, column, rendered)
+			}
+		}
+		if !found {
+			t.Fatalf("rendered list missing %q:\n%s", target, rendered)
+		}
+	}
+	for _, line := range strings.Split(rendered, "\n") {
+		if width := lipgloss.Width(line); width > 48 {
+			t.Fatalf("list line width = %d, want <= 48: %q", width, line)
+		}
+	}
+
+	for _, focus := range []focus{focusList, focusTranscript} {
+		m.focus = focus
+		rendered = stripSGR(m.renderList(48, 12))
+		for _, line := range strings.Split(rendered, "\n") {
+			index := strings.Index(line, "Conversations")
+			if index < 0 {
+				continue
+			}
+			if column := lipgloss.Width(line[:index]); column != 3 {
+				t.Fatalf("panel title starts at column %d with focus %v, want 3:\n%s", column, focus, rendered)
+			}
+		}
+	}
+
+	m.query = "parser"
+	m.searchMatches = map[string]index.Result{
+		"thread-1": {
+			ID: "thread-1", Match: index.MatchBody,
+			Snippet: []index.SnippetSegment{{Text: "before parser after"}},
+		},
+	}
+	rendered = stripSGR(m.renderList(48, 12))
+	for _, line := range strings.Split(rendered, "\n") {
+		index := strings.Index(line, "message · before parser after")
+		if index < 0 {
+			continue
+		}
+		if column := lipgloss.Width(line[:index]); column != 3 {
+			t.Fatalf("search context starts at column %d, want 3:\n%s", column, rendered)
+		}
+		return
+	}
+	t.Fatalf("rendered search context is missing:\n%s", rendered)
 }
 
 func stripSGR(value string) string {
@@ -137,32 +206,35 @@ func TestTranscriptUsesConfiguredScrollKeys(t *testing.T) {
 
 func TestTranscriptSeparatesConversationBlocks(t *testing.T) {
 	lines := transcriptTestModel().currentTranscriptLines()
-	var text []string
-	for _, line := range lines {
-		text = append(text, line.Text)
+	if len(lines) != 21 {
+		t.Fatalf("line count = %d, want 21: %#v", len(lines), lines)
 	}
-
-	want := []string{
-		"TURN 1",
-		"",
-		"YOU",
-		"Please inspect the parser.",
-		"",
-		"▶ Activity  2 · cmd 1 · plan 1",
-		"",
-		"CODEX",
-		"The parser is in config.go.",
-		"",
-		"TURN 2",
-		"",
-		"YOU",
-		"Thanks.",
-		"",
-		"CODEX",
-		"You're welcome.",
+	checks := []struct {
+		index     int
+		kind      transcriptLineKind
+		text      string
+		alignment transcriptLineAlignment
+	}{
+		{0, lineTurnDivider, "TURN 1", alignCenter},
+		{1, lineBlank, "", alignLeft},
+		{2, lineBubbleTop, "You", alignRight},
+		{3, lineBubbleBody, "Please inspect the parser.", alignRight},
+		{4, lineBubbleBottom, "", alignRight},
+		{6, lineText, "▶ Activity  2 · cmd 1 · plan 1", alignCenter},
+		{8, lineBubbleTop, "Codex", alignLeft},
+		{9, lineBubbleBody, "The parser is in config.go.", alignLeft},
+		{12, lineTurnDivider, "TURN 2", alignCenter},
+		{14, lineBubbleTop, "You", alignRight},
+		{18, lineBubbleTop, "Codex", alignLeft},
 	}
-	if strings.Join(text, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("unexpected transcript spacing:\ngot:  %#v\nwant: %#v", text, want)
+	for _, check := range checks {
+		got := lines[check.index]
+		if got.Kind != check.kind || got.Text != check.text || got.Alignment != check.alignment {
+			t.Fatalf("line %d = %#v, want kind=%v text=%q alignment=%v", check.index, got, check.kind, check.text, check.alignment)
+		}
+	}
+	if !lines[6].Actionable || !lines[6].Activity {
+		t.Fatalf("activity line is not actionable: %#v", lines[6])
 	}
 }
 
@@ -180,12 +252,26 @@ func TestTranscriptTurnJumpAndResizeAnchor(t *testing.T) {
 	if resized[m.transcriptCursor].Turn != 1 {
 		t.Fatalf("resize moved to turn %d", resized[m.transcriptCursor].Turn)
 	}
+
+	for i, line := range resized {
+		if line.Kind == lineBubbleBody && line.Text == "Thanks." {
+			m.transcriptCursor = i
+			break
+		}
+	}
+	anchor := resized[m.transcriptCursor].Anchor
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 140, Height: 24})
+	m = next.(model)
+	resized = m.currentTranscriptLines()
+	if resized[m.transcriptCursor].Anchor != anchor || resized[m.transcriptCursor].Text != "Thanks." {
+		t.Fatalf("resize lost message anchor %q: %#v", anchor, resized[m.transcriptCursor])
+	}
 }
 
 func TestRenderShowsConversationFirstLayout(t *testing.T) {
 	m := transcriptTestModel()
 	rendered := m.render()
-	for _, want := range []string{"▶ Transcript", "TURN 1", "YOU", "▶ Activity", "CODEX", "j/k scroll"} {
+	for _, want := range []string{"▶ Transcript", "TURN 1", "You", "▶ Activity", "Codex", "╭", "╯", "j/k scroll"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("render missing %q:\n%s", want, rendered)
 		}
@@ -195,6 +281,84 @@ func TestRenderShowsConversationFirstLayout(t *testing.T) {
 	rendered = m.render()
 	if !strings.Contains(rendered, "Transcript 2/2") || strings.Contains(rendered, "Conversations 1/2") {
 		t.Fatalf("compact transcript view is unclear:\n%s", rendered)
+	}
+}
+
+func TestTranscriptBubbleAlignmentAndMaximumWidth(t *testing.T) {
+	m := transcriptTestModel()
+	lines := buildTranscriptLines(m.transcript, 40, false)
+	var userTop, assistantTop transcriptLine
+	for _, line := range lines {
+		if line.Kind != lineBubbleTop {
+			continue
+		}
+		switch line.Role {
+		case lineUser:
+			userTop = line
+		case lineAssistant:
+			assistantTop = line
+		}
+	}
+	if userTop.BlockWidth > 30 || assistantTop.BlockWidth > 30 {
+		t.Fatalf("bubble exceeds 75%% width: user=%d assistant=%d", userTop.BlockWidth, assistantTop.BlockWidth)
+	}
+	user := stripSGR(m.renderTranscriptLine(userTop, 40))
+	assistant := stripSGR(m.renderTranscriptLine(assistantTop, 40))
+	if !strings.HasPrefix(assistant, "╭") {
+		t.Fatalf("assistant bubble is not left aligned: %q", assistant)
+	}
+	if strings.HasPrefix(user, "╭") || !strings.HasPrefix(strings.TrimLeft(user, " "), "╭") {
+		t.Fatalf("user bubble is not right aligned: %q", user)
+	}
+	if lipgloss.Width(user) != 40 {
+		t.Fatalf("right-aligned user row width = %d, want 40: %q", lipgloss.Width(user), user)
+	}
+}
+
+func TestTranscriptBubbleWrapsFullWidthTextWithoutOverflow(t *testing.T) {
+	m := transcriptTestModel()
+	const message = "日本語の長い発言です。全角文字でも安全です。"
+	m.transcript.Turns[0].Primary[0].Text = message
+	lines := buildTranscriptLines(m.transcript, 24, true)
+	var wrapped []string
+	for _, line := range lines {
+		if line.Kind == lineBubbleBody && line.Role == lineUser && line.Turn == 0 {
+			wrapped = append(wrapped, line.Text)
+		}
+		if got := lipgloss.Width(stripSGR(m.renderTranscriptLine(line, 24))); got > 24 {
+			t.Fatalf("rendered line width = %d, want <= 24: %#v", got, line)
+		}
+	}
+	if strings.Join(wrapped, "") != message || len(wrapped) < 2 {
+		t.Fatalf("full-width message wrap = %#v", wrapped)
+	}
+	for _, line := range lines {
+		if strings.HasPrefix(line.Anchor, "turn:0:activity:") && line.Alignment != alignCenter {
+			t.Fatalf("expanded activity row is not centered: %#v", line)
+		}
+	}
+}
+
+func TestTranscriptBubblePreservesBlankLinesInCompactLayout(t *testing.T) {
+	m := transcriptTestModel()
+	m.width = 60
+	m.transcript.Turns[0].Primary[0].Text = "一行目\n\n二行目"
+	lines := m.currentTranscriptLines()
+	var body []string
+	for _, line := range lines {
+		if line.Anchor == "turn:0:message:0:user-1" && line.Kind == lineBubbleBody {
+			body = append(body, line.Text)
+		}
+	}
+	if strings.Join(body, "\n") != "一行目\n\n二行目" {
+		t.Fatalf("blank lines were not preserved: %#v", body)
+	}
+
+	rendered := stripSGR(m.renderTranscript(60, 20))
+	for _, line := range strings.Split(rendered, "\n") {
+		if width := lipgloss.Width(line); width > 60 {
+			t.Fatalf("compact transcript line width = %d, want <= 60: %q", width, line)
+		}
 	}
 }
 

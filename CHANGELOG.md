@@ -5,6 +5,8 @@ is based on Keep a Changelog, and the project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-27
+
 ### Added
 
 - Contributor issue forms, a code of conduct, and a synthetic TUI preview
@@ -12,6 +14,8 @@ is based on Keep a Changelog, and the project follows Semantic Versioning.
 
 ### Changed
 
+- Redesigned transcripts with left/right chat bubbles and centered turn and Activity rows
+- Kept conversation-list headings, items, metadata, and search snippets aligned within the panel
 - Expanded contribution, security, and development documentation for public collaboration
 - Pinned GitHub Actions and patched Go toolchains, and synchronized the Nix package with the latest release
 
@@ -50,7 +54,8 @@ is based on Keep a Changelog, and the project follows Semantic Versioning.
 - Doctor and configuration management commands
 - GoReleaser, GitHub Actions, Homebrew tap, and Nix packaging foundations
 
-[Unreleased]: https://github.com/HizKz/codex-history/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/HizKz/codex-history/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/HizKz/codex-history/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/HizKz/codex-history/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/HizKz/codex-history/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HizKz/codex-history/releases/tag/v0.1.0
