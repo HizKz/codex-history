@@ -1,10 +1,14 @@
 # codex-history
 
+[English](README.md)
+
 `codex-history` は、ローカルにある Codex CLI の会話を一覧・全文検索し、
 選択した会話をそのまま再開できるTUIです。
 
 非公開の履歴ファイルを直接解析せず、Codexのapp-serverプロトコルを利用します。
 会話データとSQLite検索インデックスはローカルに留まります。
+
+![合成データで表示したcodex-historyの会話一覧と本文](docs/assets/overview.svg)
 
 ## 主な機能
 
@@ -102,16 +106,22 @@ SQLiteインデックスには、コマンド出力、MCPの引数・結果な�
 ## 開発
 
 ```sh
+go mod tidy -diff
 go test ./...
+go test -race ./...
 go vet ./...
 staticcheck ./...
-nix build --no-link
+nix build --no-link 'path:.#codex-history'
 ```
 
 リポジトリの作業規約は [AGENTS.md](AGENTS.md)、設計とリリース手順は
 [docs/architecture.md](docs/architecture.md) と
 [docs/releasing.md](docs/releasing.md) にまとめています。Codexは
 `.agents/skills` にある `maintain-codex-history` Skillも自動検出します。
+
+IssueとPull Requestを歓迎します。参加前に
+[CONTRIBUTING.md](CONTRIBUTING.md)、[行動規範](CODE_OF_CONDUCT.md)、
+[セキュリティポリシー](SECURITY.md)を確認してください。
 
 本プロジェクトはコミュニティ製であり、OpenAIの公式製品ではありません。
 

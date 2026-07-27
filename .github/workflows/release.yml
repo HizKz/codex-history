@@ -19,7 +19,7 @@ jobs:
       prerelease: ${{ steps.release.outputs.prerelease }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
       - name: Validate tag, branch, and changelog
@@ -63,6 +63,11 @@ jobs:
             echo "::error::CHANGELOG.md must contain a release link for ${version}"
             exit 1
           fi
+          nix_version="$(sed -nE 's/^[[:space:]]*version = "([^"]+)";/\1/p' package.nix)"
+          if [[ "${nix_version}" != "${version}" ]]; then
+            echo "::error::package.nix version ${nix_version} does not match release ${version}"
+            exit 1
+          fi
 
           if [[ -n "${prerelease_id}" ]]; then
             echo "prerelease=true" >> "${GITHUB_OUTPUT}"
@@ -70,22 +75,34 @@ jobs:
             echo "prerelease=false" >> "${GITHUB_OUTPUT}"
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: go.mod
+          go-version: "1.25.12"
           cache: true
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l cmd internal)"
+          if [[ -n "${unformatted}" ]]; then
+            echo "::error::gofmt is required for:"
+            echo "${unformatted}"
+            exit 1
+          fi
+      - name: Check module files
+        run: go mod tidy -diff
       - name: Test
         run: go test -race ./...
       - name: Vet
         run: go vet ./...
-      - uses: dominikh/staticcheck-action@v1
+      - uses: dominikh/staticcheck-action@e986ce0bb60df51c6c9f5ccbf853d1b5bd1ca14c # v1
         with:
-          version: latest
+          version: "2025.1.1"
           install-go: false
       - name: Staticcheck
         run: staticcheck ./...
       - name: Check GoReleaser configuration
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           distribution: goreleaser
           version: '~> v2'
@@ -96,15 +113,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      actions: read
+      artifact-metadata: write
+      attestations: write
       contents: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: go.mod
+          go-version: "1.25.12"
           cache: true
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          syft-version: v1.44.0
       - name: Check Homebrew tap token
         if: needs.validate.outputs.prerelease == 'false'
         shell: bash
@@ -116,7 +141,7 @@ jobs:
             exit 1
           fi
       - name: Publish GitHub release and Homebrew Cask
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           distribution: goreleaser
           version: '~> v2'
@@ -124,6 +149,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+      - name: Attest release artifacts
+        uses: actions/attest@36051bcae73b7c2a8a6945a48cbf80953c6baa35 # v4
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            dist/*.sbom.json
 
   homebrew-smoke:
     needs: [validate, publish]

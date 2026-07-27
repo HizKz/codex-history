@@ -1,11 +1,15 @@
 # codex-history
 
+[日本語](README.ja.md)
+
 `codex-history` is a fast, local-first TUI for browsing, searching, and resuming
 [Codex CLI](https://developers.openai.com/codex/cli/) conversations.
 
 The application talks to the supported Codex app-server protocol instead of
 parsing private rollout files. Conversation content stays on your machine; the
 optional full-text index is a local SQLite database.
+
+![Synthetic codex-history TUI showing a conversation list and transcript](docs/assets/overview.svg)
 
 ## Features
 
@@ -42,7 +46,7 @@ Requirements: Go 1.25 or newer and a working `codex` executable.
 go install github.com/HizKz/codex-history/cmd/codex-history@latest
 ```
 
-An upstream nixpkgs package is planned after the first tagged release.
+An upstream nixpkgs package is planned.
 
 ## Usage
 
@@ -106,10 +110,12 @@ substring matching. Use `--no-cache` for an in-memory index.
 ## Development
 
 ```sh
+go mod tidy -diff
 go test ./...
+go test -race ./...
 go vet ./...
 staticcheck ./...
-nix build --no-link
+nix build --no-link 'path:.#codex-history'
 ```
 
 Release metadata is injected with Go linker flags; snapshots can be built with
@@ -119,6 +125,11 @@ Repository conventions live in [AGENTS.md](AGENTS.md). Architecture and release
 details are documented in [docs/architecture.md](docs/architecture.md) and
 [docs/releasing.md](docs/releasing.md). Codex also discovers the checked-in
 `maintain-codex-history` workflow from `.agents/skills`.
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md),
+the [Code of Conduct](CODE_OF_CONDUCT.md), and the
+[Security Policy](SECURITY.md) before contributing or reporting sensitive
+problems.
 
 ## Privacy and compatibility
 

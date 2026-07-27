@@ -28,6 +28,11 @@ archives:
 checksum:
   name_template: checksums.txt
 
+sboms:
+  - id: archives
+    artifacts: archive
+    disable: false
+
 changelog:
   sort: asc
   filters:
@@ -51,7 +56,7 @@ homebrew_casks:
       post:
         install: |
           if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/codex-history"]
+            system_command "/usr/bin/xattr", args: ["-d", "com.apple.quarantine", "#{staged_path}/codex-history"]
           end
 
 release:

@@ -7,7 +7,9 @@ the Homebrew Cask, and checks the installed Cask on a macOS runner.
 ## Prerequisites
 
 - A clean `main` branch with successful GitHub Actions.
-- Go, Nix, and GoReleaser available.
+- A currently supported Go 1.25 patch release, Nix, GoReleaser, and Syft
+  available. GitHub Actions pins the release toolchain to Go 1.25.12. The Nix
+  development shell provides all other release tools.
 - The `HizKz/homebrew-tap` repository exists.
 - `HOMEBREW_TAP_GITHUB_TOKEN` is configured as a repository Actions secret. Use
   a fine-grained personal access token scoped only to `HizKz/homebrew-tap` with
@@ -18,13 +20,15 @@ the Homebrew Cask, and checks the installed Cask on a macOS runner.
 1. Choose a SemVer version and move the relevant entries from `[Unreleased]` to
    a dated version section in `CHANGELOG.md`. Add its comparison link at the
    bottom of the file.
-2. Confirm the Go module remains `github.com/HizKz/codex-history`.
+2. Update `package.nix` and its linker-injected version to the exact release
+   version. Confirm the Go module remains `github.com/HizKz/codex-history`.
 3. Run:
 
    ```sh
    go test -race ./...
    go vet ./...
    staticcheck ./...
+   govulncheck ./...
    nix build --no-link 'path:.#codex-history'
    nix develop 'path:.' -c goreleaser check
    ```
@@ -42,19 +46,37 @@ git push origin vX.Y.Z
 ```
 
 The workflow rejects tags that are not SemVer-shaped, do not point to a commit
-contained in `main`, or do not have a dated changelog section and release link.
-It then runs race tests, vet, staticcheck, and `goreleaser check` before using
-either publishing token.
+contained in `main`, do not have a dated changelog section and release link, or
+do not match the Nix package version. It then runs formatting and module checks,
+race tests, vet, staticcheck, and `goreleaser check` before using either
+publishing token.
 
 For a stable tag, GoReleaser builds CGO-free Darwin and Linux archives for amd64
-and arm64, writes `checksums.txt`, publishes a non-draft GitHub release, and
-updates the Homebrew Cask. A final macOS job installs
+and arm64, writes `checksums.txt` and per-archive SPDX JSON SBOMs, publishes a
+non-draft GitHub release, and updates the Homebrew Cask. GitHub Actions attaches
+build-provenance attestations to the archives, checksums, and SBOMs. Users can
+verify a downloaded artifact with:
+
+```sh
+gh attestation verify PATH/TO/ARCHIVE -R HizKz/codex-history
+```
+
+A final macOS job installs
 `HizKz/tap/codex-history` and confirms that `codex-history --version` matches
 the tag.
 
 A tag such as `vX.Y.Z-rc.1` is published automatically as a GitHub prerelease.
 It does not update the stable Homebrew Cask and skips the Homebrew installation
 check.
+
+## macOS trust
+
+Release archives are not yet signed with an Apple Developer ID or notarized.
+The Homebrew Cask removes the quarantine attribute only from its staged
+`codex-history` binary so the unsigned community build can run. It must not
+apply recursive attribute changes to a containing directory. Developer ID
+signing and notarization are tracked separately and require dedicated Apple
+credentials and repository secrets.
 
 ## Failure recovery
 

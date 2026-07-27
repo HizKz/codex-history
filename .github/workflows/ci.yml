@@ -9,31 +9,97 @@ permissions:
   contents: read
 
 jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.25.12"
+          cache: true
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted="$(gofmt -l cmd internal)"
+          if [[ -n "${unformatted}" ]]; then
+            echo "::error::gofmt is required for:"
+            echo "${unformatted}"
+            exit 1
+          fi
+      - name: Check module files
+        run: go mod tidy -diff
+      - name: Vet
+        run: go vet ./...
+      - uses: dominikh/staticcheck-action@e986ce0bb60df51c6c9f5ccbf853d1b5bd1ca14c # v1
+        with:
+          version: "2025.1.1"
+          install-go: false
+      - name: Staticcheck
+        run: staticcheck ./...
+      - name: Vulnerability check
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
+        with:
+          go-version-input: "1.25.12"
+          go-package: ./...
+          repo-checkout: false
+          cache: false
+
   test:
+    name: Test (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: go.mod
+          go-version: "1.25.12"
           cache: true
-      - run: go test -race ./...
-      - run: go vet ./...
-      - run: go build ./cmd/codex-history
+      - name: Race tests
+        run: go test -race ./...
+      - name: CGO-free build
+        env:
+          CGO_ENABLED: "0"
+        run: go build ./cmd/codex-history
 
-  staticcheck:
+  nix:
+    name: Nix
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: DeterminateSystems/determinate-nix-action@d96678350ffd6a456235832eb11e1c491589b7bb # v3
+      - name: Build package
+        run: nix build --no-link 'path:.#codex-history'
+      - name: Check packaged version
+        run: |
+          actual="$(nix run 'path:.#codex-history' -- --version)"
+          case "${actual}" in
+            "codex-history 0.3.0 "*) ;;
+            *)
+              echo "::error::Nix package reports an unexpected version: ${actual}"
+              exit 1
+              ;;
+          esac
+
+  required:
+    name: Required
+    if: always()
+    needs: [quality, test, nix]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - uses: dominikh/staticcheck-action@v1
-        with:
-          version: latest
-          install-go: false
-      - run: staticcheck ./...
+      - name: Confirm required jobs passed
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          NIX_RESULT: ${{ needs.nix.result }}
+        run: |
+          test "${QUALITY_RESULT}" = "success"
+          test "${TEST_RESULT}" = "success"
+          test "${NIX_RESULT}" = "success"

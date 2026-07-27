@@ -5,6 +5,16 @@ is based on Keep a Changelog, and the project follows Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Contributor issue forms, a code of conduct, and a synthetic TUI preview
+- Nix, vulnerability, SBOM, and release provenance checks
+
+### Changed
+
+- Expanded contribution, security, and development documentation for public collaboration
+- Pinned GitHub Actions and patched Go toolchains, and synchronized the Nix package with the latest release
+
 ## [0.3.0] - 2026-07-26
 
 ### Added

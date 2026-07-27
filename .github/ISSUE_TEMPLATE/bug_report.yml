@@ -1,0 +1,80 @@
+name: Bug report
+description: Report reproducible incorrect behavior in codex-history.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve codex-history.
+
+        Do not include conversation bodies, credentials, usernames, absolute home-directory paths, command output, MCP payloads, or other private data. Replace them with synthetic examples.
+  - type: input
+    id: version
+    attributes:
+      label: codex-history version
+      description: Run `codex-history --version`.
+      placeholder: codex-history 0.3.0 ...
+    validations:
+      required: true
+  - type: input
+    id: codex_version
+    attributes:
+      label: Codex CLI version
+      description: Run `codex --version`. Do not include account information.
+    validations:
+      required: true
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - Homebrew
+        - GitHub release archive
+        - go install
+        - Nix
+        - Local source build
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic conversation text and generic paths.
+      placeholder: |
+        1. Start codex-history with ...
+        2. Press ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: |
+        Include only version information, errors, and synthetic examples.
+        Never paste conversation text, credentials, command output, MCP data, usernames, or home-directory paths.
+      render: text

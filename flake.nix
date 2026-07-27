@@ -25,7 +25,16 @@
       devShells = forAllSystems (system:
         let pkgs = import nixpkgs { inherit system; };
         in {
-          default = pkgs.mkShell { packages = [ pkgs.go pkgs.gopls pkgs.goreleaser ]; };
+          default = pkgs.mkShell {
+            packages = [
+              pkgs.actionlint
+              pkgs.go
+              pkgs.gopls
+              pkgs.goreleaser
+              pkgs.govulncheck
+              pkgs.syft
+            ];
+          };
         });
     };
 }

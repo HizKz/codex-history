@@ -1,0 +1,40 @@
+name: Codex compatibility report
+description: Report behavior that changed after a Codex CLI update.
+title: "compat: "
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach generated schemas or diagnostics containing conversation bodies, credentials, usernames, home-directory paths, command output, or MCP payloads.
+  - type: input
+    id: history_version
+    attributes:
+      label: codex-history version
+      placeholder: codex-history 0.3.0 ...
+    validations:
+      required: true
+  - type: input
+    id: previous_codex
+    attributes:
+      label: Last working Codex CLI version
+    validations:
+      required: true
+  - type: input
+    id: current_codex
+    attributes:
+      label: First affected Codex CLI version
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Changed behavior
+      description: Describe what changed using synthetic data.
+    validations:
+      required: true
+  - type: textarea
+    id: sanitized_error
+    attributes:
+      label: Sanitized error
+      render: text
