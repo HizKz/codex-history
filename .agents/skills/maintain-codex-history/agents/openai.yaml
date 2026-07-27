@@ -1,4 +1,4 @@
 interface:
   display_name: "Maintain Codex History"
-  short_description: "Maintain and release the Codex history TUI"
-  default_prompt: "Use $maintain-codex-history to implement and verify a change in this repository."
+  short_description: "Route maintenance work for Codex History"
+  default_prompt: "Use $maintain-codex-history to route, implement, and verify a repository change."
