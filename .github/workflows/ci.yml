@@ -79,11 +79,16 @@ jobs:
         run: nix build --no-link 'path:.#codex-history'
       - name: Check packaged version
         run: |
+          expected="$(sed -nE 's/^[[:space:]]*version = "([^"]+)";/\1/p' package.nix)"
+          if [[ -z "${expected}" ]]; then
+            echo "::error::Could not read the expected version from package.nix"
+            exit 1
+          fi
           actual="$(nix run 'path:.#codex-history' -- --version)"
           case "${actual}" in
-            "codex-history 0.3.0 "*) ;;
+            "codex-history ${expected} "*) ;;
             *)
-              echo "::error::Nix package reports an unexpected version: ${actual}"
+              echo "::error::Nix package reports an unexpected version: ${actual} (expected ${expected})"
               exit 1
               ;;
           esac
