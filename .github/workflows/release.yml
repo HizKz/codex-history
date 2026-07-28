@@ -99,6 +99,8 @@ jobs:
         with:
           version: "2025.1.1"
           install-go: false
+          # v1 still pins actions/cache v4, which runs on deprecated Node.js 20.
+          use-cache: false
       - name: Staticcheck
         run: staticcheck ./...
       - name: Check GoReleaser configuration
