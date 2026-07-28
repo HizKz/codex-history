@@ -91,7 +91,8 @@ than rune count so Japanese and other full-width text remain safe.
 Resume modes are:
 
 - `return`: suspend the TUI, run Codex, then refresh.
-- `replace`: restore the terminal and replace the process with Codex.
+- `replace` (default): restore the terminal and replace the process with Codex,
+  returning to the shell when Codex exits.
 - `print_command`: exit and print the resume command.
 
 ## Compatibility policy

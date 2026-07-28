@@ -41,8 +41,8 @@ index_on_startup = true
 max_parallel_reads = 4
 
 [resume]
-# return, replace, or print_command
-mode = "return"
+# replace returns to the shell when Codex exits. Other modes: return, print_command.
+mode = "replace"
 
 [keys]
 # Set false to start with every configurable binding unassigned. ctrl+c is reserved.

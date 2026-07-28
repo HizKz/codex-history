@@ -17,6 +17,9 @@ func TestDecodeMergesDefaults(t *testing.T) {
 		len(cfg.Keys.Detail.Close) == 0 || len(cfg.Keys.Global.FilterProject) == 0 || len(cfg.Keys.Project.Accept) == 0 {
 		t.Fatal("expected unspecified values to retain defaults")
 	}
+	if cfg.Resume.Mode != "replace" {
+		t.Fatalf("resume mode = %q, want replace", cfg.Resume.Mode)
+	}
 }
 
 func TestDecodeRejectsUnknownField(t *testing.T) {

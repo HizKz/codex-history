@@ -67,7 +67,7 @@ codex-history config check
 | `tab` | ペイン切り替え |
 | `/` | 全文検索 |
 | `p` | 作業ディレクトリ単位のプロジェクト絞り込み |
-| `enter` | 選択した会話を再開 |
+| `enter` | 選択した会話を再開（Codex終了後はシェルへ戻る） |
 | `space` | 選択ターンのActivityを開く |
 | `esc` | イベント詳細・Activityから戻る |
 | `r` / `R` | 再読込 / インデックス再構築 |
@@ -97,6 +97,9 @@ codex-history config init
 キーバインドは継承された初期値より優先され、明示設定同士の競合は拒否されます。
 
 全設定は [examples/config.toml](examples/config.toml) を参照してください。
+初期値の `resume.mode = "replace"` ではcodex-historyをCodexで置き換えるため、
+Codexを終了するとシェルへ戻ります。履歴ブラウザへ戻る動作は `"return"`、実行せず
+コマンドだけを出力する動作は `"print_command"` を指定してください。
 
 SQLiteインデックスには、コマンド出力、MCPの引数・結果などの展開式ツール詳細を
 含めません。3文字以上の検索ではtrigramインデックスを使って関連度と一致箇所を

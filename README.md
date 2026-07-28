@@ -68,7 +68,7 @@ Default keys include:
 | `tab` | Switch pane focus |
 | `/` | Full-text search |
 | `p` | Select a working-directory project filter |
-| `enter` | Resume the selected conversation |
+| `enter` | Resume the selected conversation; return to the shell when Codex exits |
 | `space` | Open the selected turn's Activity inspector |
 | `esc` | Return from event detail or Activity |
 | `r` | Refresh conversations |
@@ -100,6 +100,9 @@ values inherit the embedded defaults. To define a keymap from scratch, set
 defaults; conflicts between explicit bindings are rejected.
 
 See [examples/config.toml](examples/config.toml) for every option.
+The default `resume.mode = "replace"` replaces codex-history with Codex, so
+exiting Codex returns to the shell. Set it to `"return"` to reopen the history
+browser instead, or `"print_command"` to print the command without running it.
 
 The local index is stored below the OS cache directory. Command output, MCP
 arguments/results, and other expandable tool details are intentionally excluded
