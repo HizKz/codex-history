@@ -37,11 +37,12 @@ responses are protected by a mutex, and each response channel is completed once.
 
 Converts versioned protocol items into a smaller UI model. User and assistant
 messages, plans, reasoning summaries, commands, file changes, and tool calls get
-stable titles and display fields.
+stable titles and display fields. Stable `fileChange.changes` entries retain
+their path, kind, and unified diff for local rendering.
 
 `Transcript.Body` is a separate privacy boundary for search. It contains
 message text and safe descriptions, but excludes command output, MCP payloads,
-tool results, and raw expandable details.
+tool results, file-change paths and diffs, and raw expandable details.
 
 ### `internal/index`
 
@@ -53,7 +54,9 @@ queries use escaped `LIKE` patterns. Both paths treat query syntax, `%`, and `_`
 as literal user input.
 
 Persistent cache directories and files use user-only permissions where the OS
-supports them. `--no-cache` uses an in-memory database.
+supports them. Schema version 2 clears version 1 search rows so file-change paths
+are removed and conversations become eligible for privacy-safe reindexing.
+`--no-cache` uses an in-memory database.
 
 ### `internal/config`
 
@@ -66,7 +69,9 @@ active pane or modal scope. `ctrl+c` remains reserved.
 ### `internal/tui`
 
 Uses a value model with asynchronous `tea.Cmd` operations for process and disk
-I/O. Wide terminals render conversation and transcript panes together. Compact
+I/O. Wide terminals render Conversations, Transcript, and Diff panes together.
+Medium terminals show Conversations plus Transcript while the list is focused,
+then Transcript plus Diff while either reading pane is focused. Compact
 terminals display the focused pane. Conversation entries use a two-line layout
 with emphasized titles and subdued working-directory, source, and timestamp
 metadata. The selected entry emphasizes both rows as a single block.
@@ -87,6 +92,12 @@ Activity opens an event list, and an event opens a separately scrollable detail
 view. Message anchors preserve the current message when a resize changes
 wrapping. Wrapping, alignment, and truncation use terminal display width rather
 than rune count so Japanese and other full-width text remain safe.
+
+The Diff pane follows the turn under the transcript cursor and concatenates
+that turn's file-change entries in protocol order. Diff lines remain unwrapped;
+vertical and horizontal viewports keep long source lines and full-width Unicode
+inside the terminal boundary. Diff bodies stay outside the search index and are
+never recomputed from the current working tree.
 
 Resume modes are:
 

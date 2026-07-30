@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -126,6 +127,45 @@ func TestSearchPreservesLiteralQueriesAndShortSubstrings(t *testing.T) {
 				t.Fatalf("Search(%q) returned no snippet: %#v", query, results[0])
 			}
 		})
+	}
+}
+
+func TestSchemaOneMigrationClearsStaleSearchBodies(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "index.db")
+	store, err := Open(path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread := appserver.Thread{ID: "thread-1", Preview: "preview", UpdatedAt: 10}
+	if err := store.Upsert(ctx, thread, history.Transcript{Thread: thread, Body: "stale/file.go"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE meta SET value = '1' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err = Open(path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	needsIndex, err := store.NeedsIndex(ctx, thread.ID, thread.UpdatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !needsIndex {
+		t.Fatal("schema migration should make cached threads eligible for reindexing")
+	}
+	results, err := store.Search(ctx, "stale/file.go", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("stale body survived schema migration: %#v", results)
 	}
 }
 

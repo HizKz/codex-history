@@ -20,6 +20,8 @@ type Store struct {
 	path string
 }
 
+const currentSchemaVersion = 2
+
 type Result struct {
 	ID        string
 	Title     string
@@ -101,13 +103,47 @@ func (s *Store) migrate() error {
 		`CREATE VIRTUAL TABLE IF NOT EXISTS thread_fts USING fts5(
 			thread_id UNINDEXED, title, preview, cwd, body, tokenize='trigram'
 		)`,
-		`INSERT INTO meta(key, value) VALUES('schema_version', '1')
-		 ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {
 			return fmt.Errorf("initialize search index: %w", err)
 		}
+	}
+	var version int
+	err := s.db.QueryRow(`SELECT value FROM meta WHERE key = 'schema_version'`).Scan(&version)
+	if errors.Is(err, sql.ErrNoRows) {
+		_, err = s.db.Exec(
+			`INSERT INTO meta(key, value) VALUES('schema_version', ?)`,
+			currentSchemaVersion,
+		)
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("read search index schema version: %w", err)
+	}
+	if version == currentSchemaVersion {
+		return nil
+	}
+	if version != 1 {
+		return fmt.Errorf("unsupported search index schema version %d", version)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("migrate search index: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM thread_fts; DELETE FROM threads`); err != nil {
+		return fmt.Errorf("clear stale search index: %w", err)
+	}
+	if _, err := tx.Exec(
+		`UPDATE meta SET value = ? WHERE key = 'schema_version'`,
+		currentSchemaVersion,
+	); err != nil {
+		return fmt.Errorf("update search index schema version: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit search index migration: %w", err)
 	}
 	return nil
 }

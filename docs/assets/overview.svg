@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
   <title id="title">codex-history terminal interface</title>
-  <desc id="desc">Synthetic conversation list and chat-style transcript demonstrating the two-pane terminal interface.</desc>
+  <desc id="desc">Synthetic conversation list, chat-style transcript, and selected-turn diff demonstrating the adaptive three-pane interface.</desc>
   <rect width="1200" height="720" rx="18" fill="#111318"/>
   <rect x="1" y="1" width="1198" height="718" rx="17" fill="none" stroke="#343943" stroke-width="2"/>
   <circle cx="30" cy="30" r="7" fill="#ff5f57"/>
@@ -8,37 +8,49 @@
   <circle cx="78" cy="30" r="7" fill="#28c840"/>
   <text x="600" y="36" text-anchor="middle" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">codex-history</text>
   <line x1="0" y1="58" x2="1200" y2="58" stroke="#343943" stroke-width="2"/>
-  <rect x="16" y="76" width="360" height="574" rx="8" fill="#171a21"/>
-  <rect x="392" y="76" width="792" height="574" rx="8" fill="#171a21"/>
-  <text x="34" y="111" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">Conversations</text>
-  <text x="346" y="111" text-anchor="end" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">3</text>
-  <rect x="26" y="132" width="340" height="77" rx="6" fill="#2b3140"/>
-  <text x="34" y="160" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">Improve terminal navigation</text>
-  <text x="34" y="187" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">sample-project · moments ago</text>
-  <text x="34" y="241" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Add local search</text>
-  <text x="34" y="268" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">demo-app · yesterday</text>
-  <text x="34" y="321" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Review configuration</text>
-  <text x="34" y="348" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">terminal-tool · 2 days ago</text>
-  <text x="414" y="111" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">Improve terminal navigation</text>
-  <line x1="420" y1="146" x2="708" y2="146" stroke="#737b8c"/>
-  <text x="788" y="151" text-anchor="middle" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">TURN 1</text>
-  <line x1="868" y1="146" x2="1154" y2="146" stroke="#737b8c"/>
-  <rect x="618" y="172" width="536" height="98" rx="10" fill="none" stroke="#a6da95" stroke-width="2"/>
-  <text x="1130" y="194" text-anchor="end" fill="#a6da95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">You</text>
-  <text x="638" y="224" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Make transcript scrolling work by visual line,</text>
-  <text x="638" y="250" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">including narrow terminals and full-width text.</text>
-  <text x="788" y="310" text-anchor="middle" fill="#c6a0f6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">▶ Activity · 4 events</text>
-  <rect x="414" y="342" width="548" height="98" rx="10" fill="none" stroke="#8bd5ca" stroke-width="2"/>
-  <text x="438" y="364" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">Codex</text>
-  <text x="434" y="394" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Implemented display-width-aware wrapping and</text>
-  <text x="434" y="420" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">covered compact and wide layouts with tests.</text>
-  <line x1="420" y1="480" x2="708" y2="480" stroke="#737b8c"/>
-  <text x="788" y="485" text-anchor="middle" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">TURN 2</text>
-  <line x1="868" y1="480" x2="1154" y2="480" stroke="#737b8c"/>
-  <rect x="746" y="506" width="408" height="72" rx="10" fill="none" stroke="#a6da95" stroke-width="2"/>
-  <text x="1130" y="528" text-anchor="end" fill="#a6da95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">You</text>
-  <text x="766" y="558" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">Great — keep conversation data local.</text>
+
+  <rect x="16" y="76" width="278" height="574" rx="8" fill="#171a21"/>
+  <rect x="310" y="76" width="486" height="574" rx="8" fill="#171a21"/>
+  <rect x="812" y="76" width="372" height="574" rx="8" fill="#171a21"/>
+
+  <text x="32" y="111" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="700">Conversations</text>
+  <text x="274" y="111" text-anchor="end" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">3</text>
+  <rect x="26" y="132" width="258" height="77" rx="6" fill="#2b3140"/>
+  <text x="34" y="160" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" font-weight="700">Show turn diffs</text>
+  <text x="34" y="187" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">sample-project · now</text>
+  <text x="34" y="241" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">Add local search</text>
+  <text x="34" y="268" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">demo-app · yesterday</text>
+  <text x="34" y="321" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">Review configuration</text>
+  <text x="34" y="348" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">terminal-tool · 2 days ago</text>
+
+  <text x="328" y="111" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="700">Transcript</text>
+  <text x="778" y="111" text-anchor="end" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">8/16</text>
+  <line x1="332" y1="146" x2="474" y2="146" stroke="#737b8c"/>
+  <text x="553" y="151" text-anchor="middle" fill="#aab2c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">TURN 1</text>
+  <line x1="632" y1="146" x2="774" y2="146" stroke="#737b8c"/>
+  <rect x="444" y="172" width="330" height="98" rx="10" fill="none" stroke="#a6da95" stroke-width="2"/>
+  <text x="752" y="194" text-anchor="end" fill="#a6da95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">You</text>
+  <text x="462" y="224" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">Show the changes beside</text>
+  <text x="462" y="248" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">the conversation.</text>
+  <text x="553" y="310" text-anchor="middle" fill="#c6a0f6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">▶ Activity 3 · files 1</text>
+  <rect x="332" y="342" width="360" height="98" rx="10" fill="none" stroke="#8bd5ca" stroke-width="2"/>
+  <text x="352" y="364" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">Codex</text>
+  <text x="350" y="394" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">Added a turn-linked Diff pane</text>
+  <text x="350" y="418" fill="#f2f4f8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">with horizontal scrolling.</text>
+
+  <text x="830" y="111" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="700">Diff · Turn 1</text>
+  <text x="1164" y="111" text-anchor="end" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">1 file · col 1</text>
+  <text x="832" y="151" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">update · internal/tui/model.go</text>
+  <text x="832" y="187" fill="#7dc4e4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">@@ -42,6 +42,7 @@</text>
+  <text x="832" y="219" fill="#d4d8e0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14"> focusList focus = iota</text>
+  <text x="832" y="247" fill="#a6da95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">+focusTranscript</text>
+  <text x="832" y="275" fill="#a6da95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">+focusDiff</text>
+  <text x="832" y="323" fill="#7dc4e4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">@@ -860,2 +914,4 @@</text>
+  <text x="832" y="355" fill="#ed8796" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">-renderTwoPanes()</text>
+  <text x="832" y="383" fill="#a6da95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">+renderAdaptivePanes()</text>
+  <text x="832" y="431" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">h/l horizontal · j/k vertical</text>
+
   <line x1="0" y1="666" x2="1200" y2="666" stroke="#343943" stroke-width="2"/>
-  <text x="24" y="699" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">j/k move  / search  p project  enter resume  ? help</text>
+  <text x="24" y="699" fill="#8bd5ca" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">tab pane  j/k scroll  h/l horizontal  / search  ? help</text>
   <text x="1176" y="699" text-anchor="end" fill="#737b8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">local only</text>
 </svg>

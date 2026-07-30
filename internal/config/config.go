@@ -36,24 +36,28 @@ type CodexConfig struct {
 }
 
 type UIConfig struct {
-	Theme             string      `toml:"theme"`
-	ShowHelp          bool        `toml:"show_help"`
-	ShowTimestamps    bool        `toml:"show_timestamps"`
-	DateFormat        string      `toml:"date_format"`
-	ToolDetails       string      `toml:"tool_details"`
-	CompactBreakpoint int         `toml:"compact_breakpoint"`
-	Colors            ColorConfig `toml:"colors"`
+	Theme               string      `toml:"theme"`
+	ShowHelp            bool        `toml:"show_help"`
+	ShowTimestamps      bool        `toml:"show_timestamps"`
+	DateFormat          string      `toml:"date_format"`
+	ToolDetails         string      `toml:"tool_details"`
+	CompactBreakpoint   int         `toml:"compact_breakpoint"`
+	ThreePaneBreakpoint int         `toml:"three_pane_breakpoint"`
+	Colors              ColorConfig `toml:"colors"`
 }
 
 type ColorConfig struct {
-	Accent    string `toml:"accent"`
-	Selected  string `toml:"selected"`
-	Muted     string `toml:"muted"`
-	Border    string `toml:"border"`
-	User      string `toml:"user"`
-	Assistant string `toml:"assistant"`
-	Warning   string `toml:"warning"`
-	Error     string `toml:"error"`
+	Accent      string `toml:"accent"`
+	Selected    string `toml:"selected"`
+	Muted       string `toml:"muted"`
+	Border      string `toml:"border"`
+	User        string `toml:"user"`
+	Assistant   string `toml:"assistant"`
+	Warning     string `toml:"warning"`
+	Error       string `toml:"error"`
+	DiffAdded   string `toml:"diff_added"`
+	DiffRemoved string `toml:"diff_removed"`
+	DiffHunk    string `toml:"diff_hunk"`
 }
 
 type HistoryConfig struct {
@@ -184,11 +188,16 @@ func Validate(cfg Config) error {
 	if cfg.UI.CompactBreakpoint < 40 {
 		problems = append(problems, "ui.compact_breakpoint must be at least 40")
 	}
+	if cfg.UI.ThreePaneBreakpoint < 120 {
+		problems = append(problems, "ui.three_pane_breakpoint must be at least 120")
+	}
 	for name, value := range map[string]string{
 		"accent": cfg.UI.Colors.Accent, "selected": cfg.UI.Colors.Selected,
 		"muted": cfg.UI.Colors.Muted, "border": cfg.UI.Colors.Border,
 		"user": cfg.UI.Colors.User, "assistant": cfg.UI.Colors.Assistant,
 		"warning": cfg.UI.Colors.Warning, "error": cfg.UI.Colors.Error,
+		"diff_added": cfg.UI.Colors.DiffAdded, "diff_removed": cfg.UI.Colors.DiffRemoved,
+		"diff_hunk": cfg.UI.Colors.DiffHunk,
 	} {
 		if !validColor(value) {
 			problems = append(problems, fmt.Sprintf("ui.colors.%s has invalid color %q", name, value))

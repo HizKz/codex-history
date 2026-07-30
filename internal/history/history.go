@@ -12,14 +12,21 @@ import (
 )
 
 type Item struct {
-	ID         string
-	Kind       string
-	Role       string
-	Title      string
-	Text       string
-	Detail     string
-	Status     string
-	Expandable bool
+	ID          string
+	Kind        string
+	Role        string
+	Title       string
+	Text        string
+	Detail      string
+	Status      string
+	FileChanges []FileChange
+	Expandable  bool
+}
+
+type FileChange struct {
+	Path string
+	Kind string
+	Diff string
 }
 
 type Transcript struct {
@@ -50,7 +57,7 @@ func Build(thread appserver.Thread) Transcript {
 			} else {
 				turn.Activity = append(turn.Activity, item)
 			}
-			if item.Text != "" {
+			if item.Text != "" && item.Kind != "fileChange" {
 				searchable = append(searchable, item.Text)
 			}
 			searchable = append(searchable, item.Title)
@@ -189,17 +196,23 @@ func parseItem(raw json.RawMessage) Item {
 			Changes []struct {
 				Path string `json:"path"`
 				Kind string `json:"kind"`
+				Diff string `json:"diff"`
 			} `json:"changes"`
 		}
 		_ = json.Unmarshal(raw, &value)
 		var paths []string
 		for _, change := range value.Changes {
 			paths = append(paths, change.Kind+" "+change.Path)
+			item.FileChanges = append(item.FileChanges, FileChange{
+				Path: change.Path,
+				Kind: change.Kind,
+				Diff: change.Diff,
+			})
 		}
 		item.Title = fmt.Sprintf("File changes (%d)", len(value.Changes))
 		item.Text = strings.Join(paths, "\n")
-		item.Detail = prettyJSON(raw)
-		item.Expandable = true
+		item.Detail = formatFileChanges(item.FileChanges)
+		item.Expandable = item.Detail != ""
 	case "mcpToolCall":
 		var value struct {
 			Server    string          `json:"server"`
@@ -245,6 +258,19 @@ func parseItem(raw json.RawMessage) Item {
 		item.Title = displayKind(base.Type)
 	}
 	return item
+}
+
+func formatFileChanges(changes []FileChange) string {
+	var sections []string
+	for _, change := range changes {
+		header := strings.TrimSpace(change.Kind + " " + change.Path)
+		if strings.TrimSpace(change.Diff) == "" {
+			sections = append(sections, header)
+			continue
+		}
+		sections = append(sections, header+"\n"+strings.TrimRight(change.Diff, "\n"))
+	}
+	return strings.Join(sections, "\n\n")
 }
 
 func prettyJSON(raw json.RawMessage) string {

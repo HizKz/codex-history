@@ -35,6 +35,39 @@ func TestBuildTranscript(t *testing.T) {
 	}
 }
 
+func TestBuildNormalizesFileChangesWithoutIndexingDiffsOrPaths(t *testing.T) {
+	thread := appserver.Thread{
+		ID: "thread-1",
+		Turns: []appserver.Turn{{Items: []json.RawMessage{
+			json.RawMessage(`{"id":"u1","type":"userMessage","content":[{"type":"text","text":"update the parser"}]}`),
+			json.RawMessage(`{"id":"f1","type":"fileChange","status":"completed","changes":[{"path":"/synthetic/project/parser.go","kind":"update","diff":"@@ -1 +1 @@\n-old\n+new"},{"path":"docs/guide.md","kind":"add","diff":"+guide"}]}`),
+		}}},
+	}
+
+	transcript := Build(thread)
+	item := transcript.Turns[0].Activity[0]
+	if len(item.FileChanges) != 2 {
+		t.Fatalf("file changes = %#v", item.FileChanges)
+	}
+	if got := item.FileChanges[0]; got.Path != "/synthetic/project/parser.go" || got.Kind != "update" ||
+		!strings.Contains(got.Diff, "+new") {
+		t.Fatalf("first file change = %#v", got)
+	}
+	if !strings.Contains(item.Detail, "update /synthetic/project/parser.go") ||
+		!strings.Contains(item.Detail, "add docs/guide.md") ||
+		!strings.Contains(item.Detail, "@@ -1 +1 @@") {
+		t.Fatalf("formatted detail = %q", item.Detail)
+	}
+	for _, private := range []string{"/synthetic/project/parser.go", "docs/guide.md", "-old", "+new", "+guide"} {
+		if strings.Contains(transcript.Body, private) {
+			t.Fatalf("search body contains file-change detail %q: %q", private, transcript.Body)
+		}
+	}
+	if !strings.Contains(transcript.Body, "File changes (2)") {
+		t.Fatalf("search body is missing safe file-change title: %q", transcript.Body)
+	}
+}
+
 func TestBuildPromotesLastAgentMessageWhenFinalAnswerIsMissing(t *testing.T) {
 	thread := appserver.Thread{
 		ID: "thread-1",

@@ -13,12 +13,21 @@ func TestDecodeMergesDefaults(t *testing.T) {
 	if cfg.UI.ShowHelp {
 		t.Fatal("expected explicit show_help=false")
 	}
-	if cfg.Codex.Binary != "codex" || len(cfg.Keys.List.Down) == 0 || len(cfg.Keys.Activity.Open) == 0 ||
+	if cfg.Codex.Binary != "codex" || len(cfg.Keys.List.Down) == 0 || len(cfg.Keys.Diff.Right) == 0 ||
+		len(cfg.Keys.Activity.Open) == 0 ||
 		len(cfg.Keys.Detail.Close) == 0 || len(cfg.Keys.Global.FilterProject) == 0 || len(cfg.Keys.Project.Accept) == 0 {
 		t.Fatal("expected unspecified values to retain defaults")
 	}
 	if cfg.Resume.Mode != "replace" {
 		t.Fatalf("resume mode = %q, want replace", cfg.Resume.Mode)
+	}
+}
+
+func TestThreePaneBreakpointValidation(t *testing.T) {
+	cfg := Defaults()
+	cfg.UI.ThreePaneBreakpoint = 119
+	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "three_pane_breakpoint") {
+		t.Fatalf("expected three-pane breakpoint error, got %v", err)
 	}
 }
 
@@ -64,6 +73,14 @@ func TestActivityKeyConflictsWithGlobalKeys(t *testing.T) {
 	cfg.Keys.Activity.Open = []string{"q"}
 	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "while activity is focused") {
 		t.Fatalf("expected activity-scope conflict, got %v", err)
+	}
+}
+
+func TestDiffKeyConflictsWithGlobalKeys(t *testing.T) {
+	cfg := Defaults()
+	cfg.Keys.Diff.Right = []string{"q"}
+	if err := Validate(cfg); err == nil || !strings.Contains(err.Error(), "while diff is focused") {
+		t.Fatalf("expected diff-scope conflict, got %v", err)
 	}
 }
 

@@ -279,8 +279,143 @@ func TestRenderShowsConversationFirstLayout(t *testing.T) {
 
 	m.width = 80
 	rendered = m.render()
-	if !strings.Contains(rendered, "Transcript 2/2") || strings.Contains(rendered, "Conversations 1/2") {
+	if !strings.Contains(rendered, "Transcript 2/3") || strings.Contains(rendered, "Conversations 1/3") {
 		t.Fatalf("compact transcript view is unclear:\n%s", rendered)
+	}
+}
+
+func TestAdaptiveDiffLayouts(t *testing.T) {
+	m := diffTestModel()
+	m.width = 180
+	rendered := stripSGR(m.render())
+	for _, want := range []string{"Conversations", "Transcript", "Diff · Turn 1", "update · internal/parser.go", "+new"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("three-pane render missing %q:\n%s", want, rendered)
+		}
+	}
+	assertRenderedWidth(t, rendered, 180)
+
+	m.width = 120
+	m.focus = focusList
+	rendered = stripSGR(m.render())
+	if !strings.Contains(rendered, "Conversations") || !strings.Contains(rendered, "Transcript") ||
+		strings.Contains(rendered, "Diff · Turn") {
+		t.Fatalf("list-focused medium layout is wrong:\n%s", rendered)
+	}
+	assertRenderedWidth(t, rendered, 120)
+
+	m.focus = focusTranscript
+	rendered = stripSGR(m.render())
+	if strings.Contains(rendered, "Conversations") || !strings.Contains(rendered, "Transcript") ||
+		!strings.Contains(rendered, "Diff · Turn 1") {
+		t.Fatalf("transcript-focused medium layout is wrong:\n%s", rendered)
+	}
+	assertRenderedWidth(t, rendered, 120)
+
+	m.width = 80
+	m.focus = focusDiff
+	rendered = stripSGR(m.render())
+	if !strings.Contains(rendered, "Diff · Turn 1 3/3") || strings.Contains(rendered, "Transcript 2/3") {
+		t.Fatalf("compact diff layout is wrong:\n%s", rendered)
+	}
+	assertRenderedWidth(t, rendered, 80)
+}
+
+func TestThreePaneLayoutUsesTheLargerConfiguredBreakpoint(t *testing.T) {
+	m := diffTestModel()
+	m.cfg.UI.CompactBreakpoint = 200
+	m.cfg.UI.ThreePaneBreakpoint = 160
+	m.width = 180
+	if !m.compactLayout() || m.threePaneLayout() {
+		t.Fatalf("width 180 should remain compact with breakpoint 200")
+	}
+	m.width = 200
+	if m.compactLayout() || !m.threePaneLayout() {
+		t.Fatalf("width 200 should enter the three-pane layout")
+	}
+}
+
+func TestFocusCyclesAcrossThreePanes(t *testing.T) {
+	m := diffTestModel()
+	m.focus = focusList
+	for _, want := range []focus{focusTranscript, focusDiff, focusList} {
+		next, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+		m = next.(model)
+		if m.focus != want {
+			t.Fatalf("focus = %v, want %v", m.focus, want)
+		}
+	}
+}
+
+func TestDiffFollowsSelectedTurnAndResetsScroll(t *testing.T) {
+	m := diffTestModel()
+	if lines := m.currentDiffLines(); len(lines) == 0 || !strings.Contains(lines[0].Text, "internal/parser.go") {
+		t.Fatalf("turn 1 diff = %#v", lines)
+	}
+	m.diffCursor, m.diffOffset, m.diffColumn = 2, 1, 8
+
+	next, _ := m.handleTranscriptKey("]")
+	m = next.(model)
+	if turn := m.selectedTurn(); turn != 1 {
+		t.Fatalf("selected turn = %d, want 1", turn)
+	}
+	if lines := m.currentDiffLines(); len(lines) != 0 {
+		t.Fatalf("turn 2 should not have a diff: %#v", lines)
+	}
+	if m.diffCursor != 0 || m.diffOffset != 0 || m.diffColumn != 0 {
+		t.Fatalf("diff position was not reset: %#v", m)
+	}
+}
+
+func TestDiffNavigationAndUnicodeClipping(t *testing.T) {
+	m := diffTestModel()
+	m.width = 80
+	m.transcript.Turns[0].Activity[2].FileChanges[0].Diff =
+		"@@ -1 +1 @@\n-" + strings.Repeat("old", 40) + "\n+" + strings.Repeat("日本語", 40)
+	m.focus = focusDiff
+
+	next, _ := m.handleDiffKey("l")
+	m = next.(model)
+	if m.diffColumn != 4 {
+		t.Fatalf("horizontal offset = %d, want 4", m.diffColumn)
+	}
+	next, _ = m.handleDiffKey("j")
+	m = next.(model)
+	if m.diffCursor != 1 {
+		t.Fatalf("vertical cursor = %d, want 1", m.diffCursor)
+	}
+	if got := sliceDisplayColumns("a日本語z", 1, 4); got != "日本" {
+		t.Fatalf("full-width slice = %q, want 日本", got)
+	}
+	rendered := stripSGR(m.renderDiff(80, 20))
+	assertRenderedWidth(t, rendered, 80)
+}
+
+func TestDiffLineClassification(t *testing.T) {
+	tests := []struct {
+		line string
+		kind diffLineKind
+	}{
+		{"@@ -1 +1 @@", diffHunk},
+		{"+++ b/file.go", diffMetadata},
+		{"--- a/file.go", diffMetadata},
+		{"+added", diffAdded},
+		{"-removed", diffRemoved},
+		{" context", diffContext},
+	}
+	for _, test := range tests {
+		if got := classifyDiffLine(test.line); got != test.kind {
+			t.Fatalf("classifyDiffLine(%q) = %v, want %v", test.line, got, test.kind)
+		}
+	}
+}
+
+func assertRenderedWidth(t *testing.T, rendered string, width int) {
+	t.Helper()
+	for _, line := range strings.Split(rendered, "\n") {
+		if got := lipgloss.Width(line); got > width {
+			t.Fatalf("rendered line width = %d, want <= %d: %q", got, width, line)
+		}
 	}
 }
 
@@ -426,6 +561,13 @@ func TestRenderSearchErrorAndHelpStates(t *testing.T) {
 	rendered = m.render()
 	if !strings.Contains(rendered, "DETAIL") || strings.Contains(rendered, "ACTIVITY") {
 		t.Fatalf("detail help is not contextual:\n%s", rendered)
+	}
+
+	m.transcriptView = transcriptConversation
+	m.focus = focusDiff
+	rendered = m.render()
+	if !strings.Contains(rendered, "DIFF") || strings.Contains(rendered, "TRANSCRIPT") {
+		t.Fatalf("diff help is not contextual:\n%s", rendered)
 	}
 }
 
@@ -581,4 +723,21 @@ func transcriptTestModel() model {
 			},
 		}},
 	}
+}
+
+func diffTestModel() model {
+	m := transcriptTestModel()
+	m.transcript.Turns[0].Activity = append(m.transcript.Turns[0].Activity, history.Item{
+		ID:     "file-1",
+		Kind:   "fileChange",
+		Title:  "File changes (1)",
+		Status: "completed",
+		FileChanges: []history.FileChange{{
+			Path: "internal/parser.go",
+			Kind: "update",
+			Diff: "@@ -1 +1 @@\n-old\n+new",
+		}},
+		Expandable: true,
+	})
+	return m
 }

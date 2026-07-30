@@ -14,6 +14,7 @@ type KeyConfig struct {
 	Global      GlobalKeys     `toml:"global"`
 	List        ListKeys       `toml:"list"`
 	Transcript  TranscriptKeys `toml:"transcript"`
+	Diff        DiffKeys       `toml:"diff"`
 	Activity    ActivityKeys   `toml:"activity"`
 	Detail      DetailKeys     `toml:"detail"`
 	Search      SearchKeys     `toml:"search"`
@@ -51,6 +52,15 @@ type TranscriptKeys struct {
 	PreviousTurn []string `toml:"previous_turn"`
 	NextTurn     []string `toml:"next_turn"`
 	ToggleItem   []string `toml:"toggle_item"`
+}
+
+type DiffKeys struct {
+	Up       []string `toml:"up"`
+	Down     []string `toml:"down"`
+	PageUp   []string `toml:"page_up"`
+	PageDown []string `toml:"page_down"`
+	Left     []string `toml:"left"`
+	Right    []string `toml:"right"`
 }
 
 type ActivityKeys struct {
@@ -139,7 +149,7 @@ func ValidateKeys(keys KeyConfig) error {
 		}
 	}
 
-	for _, activeScope := range []string{"list", "transcript", "activity", "detail", "search", "project"} {
+	for _, activeScope := range []string{"list", "transcript", "diff", "activity", "detail", "search", "project"} {
 		owners := map[string]string{}
 		for _, binding := range bindings {
 			includeGlobal := activeScope != "search" && activeScope != "project"

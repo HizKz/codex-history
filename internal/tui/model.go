@@ -39,6 +39,7 @@ type focus int
 const (
 	focusList focus = iota
 	focusTranscript
+	focusDiff
 )
 
 const conversationListItemRows = 2
@@ -67,6 +68,9 @@ type model struct {
 	activityCursor   int
 	detailCursor     int
 	detailOffset     int
+	diffCursor       int
+	diffOffset       int
+	diffColumn       int
 	query            string
 	searching        bool
 	searchGeneration uint64
@@ -319,6 +323,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.transcriptCursor = resizedAnchorLine(m.currentTranscriptLines(), oldLines[oldCursor])
 			m.clampTranscriptCursor(m.currentTranscriptLines())
 		}
+		m.clampDiffCursor(m.currentDiffLines())
 	case connectedMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -492,7 +497,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case m.cfg.Keys.Match("global", "focus_next", key):
-		m.focus = (m.focus + 1) % 2
+		m.focus = (m.focus + 1) % 3
 	case m.cfg.Keys.Match("global", "search", key):
 		m.searching = true
 	case m.cfg.Keys.Match("global", "refresh", key):
@@ -513,6 +518,9 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	default:
 		if m.focus == focusList {
 			return m.handleListKey(key)
+		}
+		if m.focus == focusDiff {
+			return m.handleDiffKey(key)
 		}
 		return m.handleTranscriptKey(key)
 	}
@@ -555,6 +563,7 @@ func (m model) handleTranscriptKey(key string) (tea.Model, tea.Cmd) {
 	}
 
 	lines := m.currentTranscriptLines()
+	oldTurn := m.selectedTranscriptTurn(lines)
 	page := max(1, m.transcriptRows()/2)
 	switch {
 	case m.cfg.Keys.Match("transcript", "up", key):
@@ -577,6 +586,30 @@ func (m model) handleTranscriptKey(key string) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.clampTranscriptCursor(lines)
+	if m.selectedTranscriptTurn(lines) != oldTurn {
+		m.resetDiffPosition()
+	}
+	return m, nil
+}
+
+func (m model) handleDiffKey(key string) (tea.Model, tea.Cmd) {
+	lines := m.currentDiffLines()
+	page := max(1, m.transcriptRows()/2)
+	switch {
+	case m.cfg.Keys.Match("diff", "up", key):
+		m.diffCursor--
+	case m.cfg.Keys.Match("diff", "down", key):
+		m.diffCursor++
+	case m.cfg.Keys.Match("diff", "page_up", key):
+		m.diffCursor -= page
+	case m.cfg.Keys.Match("diff", "page_down", key):
+		m.diffCursor += page
+	case m.cfg.Keys.Match("diff", "left", key):
+		m.diffColumn -= 4
+	case m.cfg.Keys.Match("diff", "right", key):
+		m.diffColumn += 4
+	}
+	m.clampDiffCursor(lines)
 	return m, nil
 }
 
@@ -691,10 +724,31 @@ func (m *model) resetTranscriptView() {
 	m.activityCursor = 0
 	m.detailCursor = 0
 	m.detailOffset = 0
+	m.resetDiffPosition()
+}
+
+func (m *model) resetDiffPosition() {
+	m.diffCursor = 0
+	m.diffOffset = 0
+	m.diffColumn = 0
 }
 
 func (m model) compactLayout() bool {
 	return max(m.width, 60) < m.cfg.UI.CompactBreakpoint
+}
+
+func (m model) threePaneLayout() bool {
+	breakpoint := max(m.cfg.UI.CompactBreakpoint, m.cfg.UI.ThreePaneBreakpoint)
+	return max(m.width, 60) >= breakpoint
+}
+
+func (m model) widePaneWidths() (listWidth, transcriptWidth, diffWidth int) {
+	width := max(m.width, 60)
+	listWidth = max(30, min(42, width*24/100))
+	remaining := max(60, width-listWidth-2)
+	transcriptWidth = remaining / 2
+	diffWidth = remaining - transcriptWidth
+	return listWidth, transcriptWidth, diffWidth
 }
 
 func (m model) transcriptPanelWidth() int {
@@ -702,8 +756,23 @@ func (m model) transcriptPanelWidth() int {
 	if m.compactLayout() {
 		return width
 	}
-	leftWidth := max(30, min(48, width*38/100))
-	return max(30, width-leftWidth-1)
+	if m.threePaneLayout() {
+		_, transcriptWidth, _ := m.widePaneWidths()
+		return transcriptWidth
+	}
+	return max(10, (width-1)/2)
+}
+
+func (m model) diffPanelWidth() int {
+	width := max(m.width, 60)
+	if m.compactLayout() {
+		return width
+	}
+	if m.threePaneLayout() {
+		_, _, diffWidth := m.widePaneWidths()
+		return diffWidth
+	}
+	return max(10, width-(width-1)/2-1)
 }
 
 func (m model) transcriptContentWidth() int {
@@ -723,6 +792,40 @@ func (m model) currentTranscriptLines() []transcriptLine {
 		m.transcriptContentWidth(),
 		m.cfg.UI.ToolDetails == "expanded",
 	)
+}
+
+func (m model) selectedTranscriptTurn(lines []transcriptLine) int {
+	if m.transcriptView != transcriptConversation {
+		return min(max(m.activityTurn, 0), max(0, len(m.transcript.Turns)-1))
+	}
+	if len(lines) == 0 {
+		return 0
+	}
+	cursor := min(max(m.transcriptCursor, 0), len(lines)-1)
+	return lines[cursor].Turn
+}
+
+func (m model) selectedTurn() int {
+	return m.selectedTranscriptTurn(m.currentTranscriptLines())
+}
+
+func (m model) currentDiffLines() []diffLine {
+	return buildTurnDiffLines(m.transcript, m.selectedTurn())
+}
+
+func (m *model) clampDiffCursor(lines []diffLine) {
+	if len(lines) == 0 {
+		m.diffCursor, m.diffOffset, m.diffColumn = 0, 0, 0
+		return
+	}
+	m.diffCursor = min(max(m.diffCursor, 0), len(lines)-1)
+	m.diffOffset = visibleStart(m.diffOffset, m.diffCursor, m.transcriptRows(), len(lines))
+	contentWidth := max(1, m.diffPanelWidth()-6)
+	maxWidth := 0
+	for _, line := range lines {
+		maxWidth = max(maxWidth, displayWidth(line.Text))
+	}
+	m.diffColumn = min(max(m.diffColumn, 0), max(0, maxWidth-contentWidth))
 }
 
 func (m *model) clampTranscriptCursor(lines []transcriptLine) {
@@ -864,19 +967,37 @@ func (m model) render() string {
 	header := m.renderHeader(width)
 	bodyHeight := max(5, height-4)
 	var body string
-	if width < m.cfg.UI.CompactBreakpoint {
-		if m.focus == focusList {
+	switch {
+	case m.compactLayout():
+		switch m.focus {
+		case focusList:
 			body = m.renderList(width, bodyHeight)
-		} else {
+		case focusDiff:
+			body = m.renderDiff(width, bodyHeight)
+		default:
 			body = m.renderTranscript(width, bodyHeight)
 		}
-	} else {
-		leftWidth := max(30, min(48, width*38/100))
-		rightWidth := max(30, width-leftWidth-1)
+	case m.threePaneLayout():
+		listWidth, transcriptWidth, diffWidth := m.widePaneWidths()
 		body = lipgloss.JoinHorizontal(lipgloss.Top,
-			m.renderList(leftWidth, bodyHeight),
-			m.renderTranscript(rightWidth, bodyHeight),
+			m.renderList(listWidth, bodyHeight),
+			m.renderTranscript(transcriptWidth, bodyHeight),
+			m.renderDiff(diffWidth, bodyHeight),
 		)
+	default:
+		leftWidth := (width - 1) / 2
+		rightWidth := width - leftWidth - 1
+		if m.focus == focusList {
+			body = lipgloss.JoinHorizontal(lipgloss.Top,
+				m.renderList(leftWidth, bodyHeight),
+				m.renderTranscript(rightWidth, bodyHeight),
+			)
+		} else {
+			body = lipgloss.JoinHorizontal(lipgloss.Top,
+				m.renderTranscript(leftWidth, bodyHeight),
+				m.renderDiff(rightWidth, bodyHeight),
+			)
+		}
 	}
 	footerStyle := m.mutedStyle()
 	if m.err != "" {
@@ -912,7 +1033,7 @@ func (m model) renderList(width, height int) string {
 	active := m.focus == focusList
 	name := "Conversations"
 	if m.compactLayout() {
-		name += " 1/2"
+		name += " 1/3"
 	}
 	title := panelTitle(name, active, fmt.Sprintf("%d", len(m.visible)))
 	innerWidth := max(10, width-2)
@@ -1001,7 +1122,7 @@ func (m model) renderTranscript(width, height int) string {
 	if m.transcriptID == "" {
 		name := "Transcript"
 		if m.compactLayout() {
-			name += " 2/2"
+			name += " 2/3"
 		}
 		title := panelTitle(name, active, "")
 		return m.panelStyle(active).Width(innerWidth).Height(innerHeight).Render(title + "\n" + m.mutedStyle().Render("Select a conversation"))
@@ -1014,6 +1135,71 @@ func (m model) renderTranscript(width, height int) string {
 	default:
 		return m.renderConversationPanel(active, innerWidth, innerHeight, rows)
 	}
+}
+
+func (m model) renderDiff(width, height int) string {
+	active := m.focus == focusDiff
+	innerWidth := max(10, width-2)
+	innerHeight := max(2, height-2)
+	rows := max(1, innerHeight-1)
+	rowWidth := max(4, innerWidth-2)
+	contentWidth := max(1, rowWidth-2)
+	turn := m.selectedTurn()
+	name := fmt.Sprintf("Diff · Turn %d", turn+1)
+	if m.compactLayout() {
+		name += " 3/3"
+	}
+	if m.transcriptID == "" {
+		title := panelTitle(name, active, "")
+		return m.panelStyle(active).Width(innerWidth).Height(innerHeight).
+			Render(title + "\n" + m.mutedStyle().Render("Select a conversation"))
+	}
+
+	logical := buildTurnDiffLines(m.transcript, turn)
+	if len(logical) == 0 {
+		title := panelTitle(name, active, "0 files")
+		return m.panelStyle(active).Width(innerWidth).Height(innerHeight).
+			Render(title + "\n" + m.mutedStyle().Render(emptyTurnDiffMessage(turn)))
+	}
+	cursor := min(max(m.diffCursor, 0), len(logical)-1)
+	start := visibleStart(m.diffOffset, cursor, rows, len(logical))
+	end := min(len(logical), start+rows)
+	lines := make([]string, 0, rows)
+	for i := start; i < end; i++ {
+		gutter := "  "
+		if i == cursor {
+			gutter = m.accentStyle().Bold(true).Render("▌ ")
+		}
+		text := sliceDisplayColumns(logical[i].Text, m.diffColumn, contentWidth)
+		style := lipgloss.NewStyle()
+		switch logical[i].Kind {
+		case diffAdded:
+			style = applyForeground(style, m.semanticColor("diff_added", m.cfg.UI.Colors.DiffAdded))
+		case diffRemoved:
+			style = applyForeground(style, m.semanticColor("diff_removed", m.cfg.UI.Colors.DiffRemoved))
+		case diffHunk:
+			style = applyForeground(style, m.semanticColor("diff_hunk", m.cfg.UI.Colors.DiffHunk)).Bold(true)
+		case diffMetadata:
+			style = m.mutedStyle()
+		case diffFileHeader:
+			style = m.accentStyle().Bold(true)
+		}
+		row := style.Render(text)
+		lines = append(lines, lipgloss.NewStyle().Width(rowWidth).MaxWidth(rowWidth).Render(gutter+row))
+	}
+	for len(lines) < rows {
+		lines = append(lines, "")
+	}
+	position := fmt.Sprintf(
+		"%d files · %d/%d · col %d",
+		turnDiffFileCount(m.transcript, turn),
+		cursor+1,
+		len(logical),
+		m.diffColumn+1,
+	)
+	title := panelTitle(name, active, position)
+	return m.panelStyle(active).Width(innerWidth).Height(innerHeight).
+		Render(title + "\n" + strings.Join(lines, "\n"))
 }
 
 func (m model) renderConversationPanel(active bool, innerWidth, innerHeight, rows int) string {
@@ -1041,7 +1227,7 @@ func (m model) renderConversationPanel(active bool, innerWidth, innerHeight, row
 	}
 	name := "Transcript"
 	if m.compactLayout() {
-		name += " 2/2"
+		name += " 2/3"
 	}
 	position := "0/0"
 	if len(logical) > 0 {
@@ -1233,6 +1419,9 @@ func (m model) helpSections() []helpSection {
 			helpSection{"search", "SEARCH"},
 		)
 	}
+	if m.focus == focusDiff {
+		return append(sections, helpSection{"diff", "DIFF"})
+	}
 	switch m.transcriptView {
 	case transcriptActivity:
 		return append(sections, helpSection{"activity", "ACTIVITY"})
@@ -1268,6 +1457,14 @@ func (m model) footerText() string {
 			m.keyHint("global", "filter_project", "project"),
 			m.keyHint("global", "help", "help"),
 		)
+	} else if m.focus == focusDiff {
+		hints = compactHints(
+			m.keyPairHint("diff", "down", "up", "scroll"),
+			m.keyPairHint("diff", "page_up", "page_down", "page"),
+			m.keyPairHint("diff", "left", "right", "horizontal"),
+			m.keyHint("global", "focus_next", "list"),
+			m.keyHint("global", "help", "help"),
+		)
 	} else {
 		switch m.transcriptView {
 		case transcriptActivity:
@@ -1290,7 +1487,7 @@ func (m model) footerText() string {
 				m.keyPairHint("transcript", "page_up", "page_down", "page"),
 				m.keyPairHint("transcript", "previous_turn", "next_turn", "turn"),
 				m.keyHint("transcript", "toggle_item", "activity"),
-				m.keyHint("global", "focus_next", "list"),
+				m.keyHint("global", "focus_next", "diff"),
 				m.keyHint("global", "help", "help"),
 			)
 		}
@@ -1342,6 +1539,8 @@ func bindingLabel(action string) string {
 		"previous_turn":   "Previous turn",
 		"next_turn":       "Next turn",
 		"toggle_item":     "Open activity",
+		"left":            "Scroll left",
+		"right":           "Scroll right",
 	}
 	if label := labels[action]; label != "" {
 		return label
@@ -1375,10 +1574,12 @@ func (m model) semanticColor(name, configured string) string {
 		"dark": {
 			"accent": "bright_cyan", "selected": "bright_white", "muted": "bright_black",
 			"border": "bright_black", "user": "green", "assistant": "cyan", "warning": "yellow", "error": "red",
+			"diff_added": "green", "diff_removed": "red", "diff_hunk": "cyan",
 		},
 		"light": {
 			"accent": "blue", "selected": "black", "muted": "bright_black",
 			"border": "black", "user": "green", "assistant": "blue", "warning": "yellow", "error": "red",
+			"diff_added": "green", "diff_removed": "red", "diff_hunk": "blue",
 		},
 	}
 	if color := palettes[m.cfg.UI.Theme][name]; color != "" {

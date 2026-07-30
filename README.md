@@ -9,11 +9,11 @@ The application talks to the supported Codex app-server protocol instead of
 parsing private rollout files. Conversation content stays on your machine; the
 optional full-text index is a local SQLite database.
 
-![Synthetic codex-history TUI showing a conversation list and transcript](docs/assets/overview.svg)
+![Synthetic codex-history TUI showing conversations, transcript, and turn diff](docs/assets/overview.svg)
 
 ## Features
 
-- Two-pane conversation list and turn-based transcript viewer, with a compact single-pane layout
+- Adaptive three-pane conversation, transcript, and turn-diff viewer, with two-pane and compact single-pane layouts
 - Relevance-ranked full-text search with match snippets across user and assistant messages
 - Conversation-first reading with plans, reasoning, commands, file changes, MCP calls, and other events grouped into inspectable Activity rows
 - Resume a selected conversation with `codex resume <thread-id>`
@@ -62,8 +62,9 @@ Default keys include:
 
 | Key | Action |
 | --- | --- |
-| `j` / `k`, arrows | Move through conversations or scroll transcript lines |
-| `ctrl+u` / `ctrl+d` | Scroll transcript or detail by half a page |
+| `j` / `k`, arrows | Move conversations or scroll transcript/diff vertically |
+| `ctrl+u` / `ctrl+d` | Scroll transcript, diff, or detail by half a page |
+| `h` / `l`, left / right | Scroll long diff lines horizontally |
 | `[` / `]` | Jump to the previous or next turn |
 | `tab` | Switch pane focus |
 | `/` | Full-text search |
@@ -105,10 +106,11 @@ exiting Codex returns to the shell. Set it to `"return"` to reopen the history
 browser instead, or `"print_command"` to print the command without running it.
 
 The local index is stored below the OS cache directory. Command output, MCP
-arguments/results, and other expandable tool details are intentionally excluded
-from full-text indexing. Searches of three or more characters use the trigram
-index for relevance ranking and match snippets; shorter searches retain literal
-substring matching. Use `--no-cache` for an in-memory index.
+arguments/results, file-change paths and diff bodies, and other expandable tool
+details are intentionally excluded from full-text indexing. Searches of three
+or more characters use the trigram index for relevance ranking and match
+snippets; shorter searches retain literal substring matching. Use `--no-cache`
+for an in-memory index.
 
 ## Development
 
