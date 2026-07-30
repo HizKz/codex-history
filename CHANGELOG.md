@@ -5,6 +5,22 @@ is based on Keep a Changelog, and the project follows Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-30
+
+### Added
+
+- Added a turn-linked Diff pane with unified-diff colors, vertical and
+  horizontal scrolling, and adaptive three-, two-, and one-pane layouts
+- Added configurable Diff key bindings, colors, and a three-pane breakpoint
+
+### Changed
+
+- Kept file-change paths and diff bodies out of full-text search, with a safe
+  local index migration that makes existing conversations eligible for
+  reindexing
+- Updated the English and Japanese documentation and synthetic TUI preview for
+  the Diff workflow
+
 ## [0.4.1] - 2026-07-28
 
 ### Changed
@@ -62,7 +78,8 @@ is based on Keep a Changelog, and the project follows Semantic Versioning.
 - Doctor and configuration management commands
 - GoReleaser, GitHub Actions, Homebrew tap, and Nix packaging foundations
 
-[Unreleased]: https://github.com/HizKz/codex-history/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/HizKz/codex-history/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/HizKz/codex-history/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/HizKz/codex-history/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/HizKz/codex-history/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/HizKz/codex-history/compare/v0.2.0...v0.3.0

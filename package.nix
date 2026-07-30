@@ -2,7 +2,7 @@
 
 buildGoModule {
   pname = "codex-history";
-  version = "0.4.1";
+  version = "0.5.0";
 
   src = ./.;
   vendorHash = "sha256-eA9P3TJHxwmfgmeqpj0SufJx/p2Bt+gAC0+Q/TwSetE=";
@@ -12,7 +12,7 @@ buildGoModule {
   ldflags = [
     "-s"
     "-w"
-    "-X github.com/HizKz/codex-history/internal/buildinfo.Version=0.4.1"
+    "-X github.com/HizKz/codex-history/internal/buildinfo.Version=0.5.0"
   ];
 
   doCheck = true;
