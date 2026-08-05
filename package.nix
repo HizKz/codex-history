@@ -5,7 +5,7 @@ buildGoModule {
   version = "0.5.0";
 
   src = ./.;
-  vendorHash = "sha256-eA9P3TJHxwmfgmeqpj0SufJx/p2Bt+gAC0+Q/TwSetE=";
+  vendorHash = "sha256-d9F5XPQBE8Sl5bUGvH7i+/ekx9SrjcZPmPKATxtV8zs=";
 
   subPackages = [ "cmd/codex-history" ];
 
